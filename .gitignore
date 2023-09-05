@@ -1,3 +1,9 @@
 .venv
 data/
 model/
+*.vectorized_metadata
+*.vectorized_content
+.tmp/
+*.py[cod]
+.noteablekeep
+__pycache__
