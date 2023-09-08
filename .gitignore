@@ -8,3 +8,4 @@ model/
 *.py[cod]
 .noteablekeep
 __pycache__
+.env
