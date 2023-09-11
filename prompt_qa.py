@@ -63,7 +63,7 @@ Generate only questions based on the below query.
 You are a Teacher/Professor. Your task is to create $num questions and an answer key for an quiz/examination that is not multiple choice.
 The questions should be diverse in nature across the document. Restrict the questions to the context information provided.
 
-Please organize this into a tsv format with columns for the Question, the Answer, and the Information used to arrive at the answer."""
+Please organize this into a pipe-delimited format with columns for the Question, the Answer, and the Information used to arrive at the answer."""
 )
 
 
@@ -75,7 +75,7 @@ QuestionSet = namedtuple("QuestionSet", ["question", "answer", "context"])
 
 def format_generated_questions(
     generated_question_sets: Iterable,
-    deliminter: str = "\t",
+    deliminter: str = "|",
     is_include_header: bool = False,
 ) -> List[QuestionSet]:
     if is_include_header:
@@ -137,14 +137,29 @@ if __name__ == "__main__":
     if not output_dir.is_dir():
         LOGGER.error(f"{output_dir} is not an existing directory. Please create it before trying to put files into it.")
 
-    # # Question generation for each monster
-    # for monster_name, monster_info in monster_infos.items():
-    #     response = generate_question_set_response(
-    #         context=monster_info, num_of_questions=2
-    #     )
-    #     with open(f"{args.output_dir}{monster_name}.json", "w") as fp:
-    #         json.dump(response, fp)
+    # Question generation for each monster
+    n = 0
+    for monster_name, monster_info in monster_infos.items():
+        response = generate_question_set_response(
+            context=monster_info, num_of_questions=2
+        )
+        with open(f"{args.output_dir}{monster_name}.json", "w") as fp:
+            json.dump(response, fp)
+        # Temp stop gag
+        if n == 5:
+            break
+        n += 1
 
     for filename in output_dir.glob("*.json"):
         with open(filename, "r") as fp:
-            monster = json.load(fp)
+            prompt_response = json.load(fp)
+        try:
+            choices = prompt_response.get("choices")
+            choice = choices[0]
+            message = choice.get("message")
+            content = message.get("content")
+        except (KeyError, TypeError) as e:
+            LOGGER.warning(f"Failed processing {filename}. See error:\n{e}")
+        content_list = content.split("\n")
+        print(format_generated_questions(content_list[1:]))
+        # break
