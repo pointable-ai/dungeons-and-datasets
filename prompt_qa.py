@@ -1,6 +1,8 @@
 from collections import namedtuple
+from pathlib import Path
 from string import Template
 from typing import Dict, Iterable, List
+import argparse
 import json
 import logging
 
@@ -9,7 +11,8 @@ import openai
 LOGGER = logging.getLogger(__name__)
 
 
-QUESTION_EVAL_PROMPT = Template("""Please tell if a given piece of information is supported by the context.
+QUESTION_EVAL_PROMPT = Template(
+    """Please tell if a given piece of information is supported by the context.
 You need to answer with either YES or NO.
 Answer YES if any of the context supports the information, even if most of the context is unrelated. Some examples are provided below.
 
@@ -28,10 +31,12 @@ Answer: NO
 
 Information: $query_str
 Context: $context_str
-Answer:""")
+Answer:"""
+)
 
 
-QA_EVAL_PROMPT = Template("""
+QA_EVAL_PROMPT = Template(
+    """
     Your task is to evaluate if the response for the query is in line with the context information provided.
     You have two options to answer. Either YES/NO.
     Answer - YES, if the response for the query is in line with context information otherwise NO.
@@ -45,7 +50,8 @@ QA_EVAL_PROMPT = Template("""
 )
 
 # Note that a TSV is generated
-QUESTION_GENERATION_PROMPT = Template("""Context information is below.
+QUESTION_GENERATION_PROMPT = Template(
+    """Context information is below.
 
 ---------------------
 $context_str
@@ -57,7 +63,8 @@ Generate only questions based on the below query.
 You are a Teacher/Professor. Your task is to create $num questions and an answer key for an quiz/examination that is not multiple choice.
 The questions should be diverse in nature across the document. Restrict the questions to the context information provided.
 
-Please organize this into a tsv format with columns for the Question, the Answer, and the Information used to arrive at the answer.""")
+Please organize this into a tsv format with columns for the Question, the Answer, and the Information used to arrive at the answer."""
+)
 
 
 SAMPLE = 'Question\tAnswer\tInformation Used\n1. What special abilities does the ancient deep crow possess?\tThe ancient deep crow has the special abilities "Magic Resistance" and "Shadow Stealth".\t- Special abilities listed in the context information.\n2. What is the saving throw DC for the ancient deep crow\'s Shadow Caw ability?\tThe saving throw DC for the ancient deep crow\'s Shadow Caw ability is 17.\t- Shadow Caw ability details in the context information.\n3. What condition can the ancient deep crow inflict on a target with its mandibles? The ancient deep crow can inflict the "restrained" condition on a target with its mandibles.\t- Mandibles ability details in the context information.'
@@ -65,7 +72,12 @@ SAMPLE = 'Question\tAnswer\tInformation Used\n1. What special abilities does the
 
 QuestionSet = namedtuple("QuestionSet", ["question", "answer", "context"])
 
-def format_generated_questions(generated_question_sets: Iterable, deliminter: str="\t", is_include_header: bool=False) -> List[QuestionSet]:
+
+def format_generated_questions(
+    generated_question_sets: Iterable,
+    deliminter: str = "\t",
+    is_include_header: bool = False,
+) -> List[QuestionSet]:
     if is_include_header:
         generated_question_sets = generated_question_sets[1:]
 
@@ -75,32 +87,64 @@ def format_generated_questions(generated_question_sets: Iterable, deliminter: st
         try:
             question = QuestionSet(*question_set_components)
         except TypeError as e:
-            LOGGER.warning("Question cannot be processed. This is likely a missing delimiter in response. "
-                f"\nQuestion:\n{question_set_components}")
+            LOGGER.warning(
+                "Question cannot be processed. This is likely a missing delimiter in response. "
+                f"\nQuestion:\n{question_set_components}"
+            )
             continue
         question_set_list.append(question)
 
     return question_set_list
 
-def generate_question_set_response(context: str, num_of_questions: int, llm_model: str="gpt-3.5-turbo") -> Dict:
-    question_prompt = QUESTION_GENERATION_PROMPT.substitute(context_str=context, num=num_of_questions)
+
+def generate_question_set_response(
+    context: str, num_of_questions: int, llm_model: str = "gpt-3.5-turbo"
+) -> Dict:
+    # TODO: there's a bug when num_of_questions is 1; the llm will respond with a 1 "set" of questions, which is more than 1 question
+    question_prompt = QUESTION_GENERATION_PROMPT.substitute(
+        context_str=context, num=num_of_questions
+    )
     response = openai.ChatCompletion.create(
-        model=llm_model,
-        messages=[{"role": "user", "content": question_prompt}]
+        model=llm_model, messages=[{"role": "user", "content": question_prompt}]
     )
     response_dict = response.to_dict()
     response_dict["generation_prompt"] = question_prompt
     return response_dict
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Generates questions for a set of knowledge base using an LLM.")
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        help="The dir to output the results of the requests.",
+        default="generated_questions/"
+    )
+
+    args = parser.parse_args()
+    return args
+
+
 # ==== This is "throwaway" code for the D&D dataset ====
-if __name__ == '__main__':
+if __name__ == "__main__":
+    # This expects monster_text in the old style (prior to langchain processing) where it's monster name as key and info as content
     with open("monster_text.json", "r") as fp:
         monster_infos = json.load(fp)
 
-    for monster_name, monster_info in monster_infos.items():
-        response = generate_question_set_response(context=monster_info, num_of_questions=2)
-        with open(f"generated_questions/{monster_name}.json", "w") as fp:
-            json.dump(response, fp)
-        break
+    args = parse_args()
 
+    output_dir = Path(args.output_dir)
+    if not output_dir.is_dir():
+        LOGGER.error(f"{output_dir} is not an existing directory. Please create it before trying to put files into it.")
+
+    # # Question generation for each monster
+    # for monster_name, monster_info in monster_infos.items():
+    #     response = generate_question_set_response(
+    #         context=monster_info, num_of_questions=2
+    #     )
+    #     with open(f"{args.output_dir}{monster_name}.json", "w") as fp:
+    #         json.dump(response, fp)
+
+    for filename in output_dir.glob("*.json"):
+        with open(filename, "r") as fp:
+            monster = json.load(fp)
