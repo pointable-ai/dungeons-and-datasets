@@ -10,3 +10,4 @@ model/
 __pycache__
 .env
 chroma/
+*generated
