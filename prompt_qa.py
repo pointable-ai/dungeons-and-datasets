@@ -1,3 +1,7 @@
+"""
+TODO: Consider using click to make this a full fledged CLI
+"""
+
 from collections import namedtuple
 from pathlib import Path
 from pprint import pformat
@@ -130,10 +134,22 @@ def generate_question_set_response(
 def parse_args():
     parser = argparse.ArgumentParser(description="Generates questions for a set of knowledge base using an LLM.")
     parser.add_argument(
+        "--input_json",
+        type=str,
+        help="The json to input for question generation.",
+        default="monster_text.json"
+    )
+    parser.add_argument(
         "--output_dir",
         type=str,
         help="The dir to output the results of the requests.",
         default="generated_questions/"
+    )
+    parser.add_argument(
+        "--output_file",
+        type=str,
+        help="The final file to output the results of processing questions from requests.",
+        default="total_question.csv"
     )
     parser.add_argument(
         "--start_index",
@@ -141,37 +157,53 @@ def parse_args():
         help="The index to start processing.",
         default=0
     )
+    parser.add_argument(
+        "--generate",
+        type=bool,
+        action="store_true",
+        help="The index to start processing.",
+        default=False
+    )
 
     args = parser.parse_args()
     return args
 
 
-# ==== This is "throwaway" code for the D&D dataset ====
+# This is "throwaway" code for the D&D dataset
 if __name__ == "__main__":
-    # This expects monster_text in the old style (prior to langchain processing) where it's monster name as key and info as content
-    with open("monster_text.json", "r") as fp:
-        monster_infos = json.load(fp)
-
     args = parse_args()
 
+    # This expects monster_text in the old style (prior to langchain processing) where it's monster name as key and info as content
+    input_json = Path(args.input_json)
+    if not input_json.is_file:
+        LOGGER.error(f"{input_json} is not a file. Please make sure you have the correct filepath or name.")
+        exit()
+
+    with open(args.input_json, "r") as fp:
+        monster_infos = json.load(fp)
+
+    # Where generated responses from openai will go
     output_dir = Path(args.output_dir)
     if not output_dir.is_dir():
         LOGGER.error(f"{output_dir} is not an existing directory. Please create it before trying to put files into it.")
+        exit()
 
     # Question generation for each monster
-    # for index, monster_item in enumerate(monster_infos.items()):
-    #     monster_name, monster_info = monster_item
-    #     if index < args.start_index:
-    #         print(f"Skip generating questions for: {monster_name}, entry {index}. "
-    #         f"Index smaller than start_index {args.start_index}.")
-    #         continue
-    #     LOGGER.info(f"Generating questions for: {monster_name}, entry {index}")
-    #     response = generate_question_set_response(
-    #         context=monster_info, num_of_questions=3
-    #     )
-    #     with open(f"{args.output_dir}{monster_name}.json", "w") as fp:
-    #         json.dump(response, fp)
+    if args.generate:
+        for index, monster_item in enumerate(monster_infos.items()):
+            monster_name, monster_info = monster_item
+            if index < args.start_index:
+                print(f"Skip generating questions for: {monster_name}, entry {index}. "
+                f"Index smaller than start_index {args.start_index}.")
+                continue
+            LOGGER.info(f"Generating questions for: {monster_name}, entry {index}")
+            response = generate_question_set_response(
+                context=monster_info, num_of_questions=3
+            )
+            with open(f"{args.output_dir}{monster_name}.json", "w") as fp:
+                json.dump(response, fp)
 
+    # Format and create the list of questions in memory to be outputted
     total_question_set = []
     for filename in output_dir.glob("*.json"):
         with open(filename, "r") as fp:
@@ -187,9 +219,12 @@ if __name__ == "__main__":
         question_set_list = format_generated_questions(content_list[1:], ground_truth=filename)
         total_question_set.extend(question_set_list)
 
+    # TODO: deal with this ad hoc header stuff in a better way
     header = content_list[0].split("|")
     header.append("ground_truth")
-    with open("total_question.csv", "w") as fp:
+
+    # Output the file with generated and formatted questions
+    with open(args.output_file, "w") as fp:
         writer = csv.writer(fp, delimiter="|")
         writer.writerow(header)
         for question in total_question_set:
