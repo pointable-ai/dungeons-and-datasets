@@ -123,6 +123,7 @@ def generate_question_set_response(
     question_prompt = QUESTION_GENERATION_PROMPT.substitute(
         context_str=context, num=num_of_questions
     )
+    # TODO: this should be hotswappable
     response = openai.ChatCompletion.create(
         model=llm_model, messages=[{"role": "user", "content": question_prompt}]
     )
@@ -133,6 +134,12 @@ def generate_question_set_response(
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Generates questions for a set of knowledge base using an LLM.")
+    parser.add_argument(
+        "--delimiter",
+        type=str,
+        help="The delimiter to be used for prompting and formatting.",
+        default="|"
+    )
     parser.add_argument(
         "--generate",
         type=bool,
@@ -195,6 +202,7 @@ if __name__ == "__main__":
         exit()
 
     # Question generation for each monster
+    # This is the snipping/transformer code for prompting
     if args.generate:
         for index, monster_item in enumerate(monster_infos.items()):
             monster_name, monster_info = monster_item
@@ -222,16 +230,18 @@ if __name__ == "__main__":
         except (KeyError, TypeError) as e:
             LOGGER.warning(f"Failed processing {filename}. See error:\n{e}")
         content_list = content.split("\n")
-        question_set_list = format_generated_questions(content_list[1:], ground_truth=filename)
+        question_set_list = format_generated_questions(
+            generated_question_sets=content_list[1:], ground_truth=filename, delimiter=args.delimiter)
         total_question_set.extend(question_set_list)
 
     # TODO: deal with this ad hoc header stuff in a better way
-    header = content_list[0].split("|")
+    header = content_list[0].split(args.delimiter)
     header.append("ground_truth")
 
     # Output the file with generated and formatted questions
     with open(args.output_file, "w") as fp:
-        writer = csv.writer(fp, delimiter="|")
+        # TODO: potentially add another arg for output delimiter
+        writer = csv.writer(fp, delimiter=args.delimiter)
         writer.writerow(header)
         for question in total_question_set:
             writer.writerow([question.question, question.answer, question.context, question.ground_truth])
