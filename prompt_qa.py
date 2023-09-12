@@ -61,7 +61,7 @@ $context_str
 Given the context information and not prior knowledge.
 Generate only questions based on the below query.
 
-You are a Teacher/Professor. Your task is to create $num questions and an answer key for an quiz/examination that is not multiple choice.
+You are a Teacher/Professor. Your task is to create $num questions, and its accompanying answer key, for an quiz/examination that is not multiple choice.
 The questions should be diverse in nature across the document. Restrict the questions to the context information provided.
 
 Please organize this into a pipe delimited format with columns for the Question, the Answer, and the Information used to arrive at the answer."""
