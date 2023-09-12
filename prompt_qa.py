@@ -135,6 +135,12 @@ def parse_args():
         help="The dir to output the results of the requests.",
         default="generated_questions/"
     )
+    parser.add_argument(
+        "--start_index",
+        type=int,
+        help="The index to start processing.",
+        default=0
+    )
 
     args = parser.parse_args()
     return args
@@ -152,18 +158,19 @@ if __name__ == "__main__":
     if not output_dir.is_dir():
         LOGGER.error(f"{output_dir} is not an existing directory. Please create it before trying to put files into it.")
 
-    # # Question generation for each monster
-    # n = 0
-    for monster_name, monster_info in monster_infos.items():
-        response = generate_question_set_response(
-            context=monster_info, num_of_questions=3
-        )
-        with open(f"{args.output_dir}{monster_name}.json", "w") as fp:
-            json.dump(response, fp)
-    #     # Temp stop gag
-    #     if n == 5:
-    #         break
-    #     n += 1
+    # Question generation for each monster
+    # for index, monster_item in enumerate(monster_infos.items()):
+    #     monster_name, monster_info = monster_item
+    #     if index < args.start_index:
+    #         print(f"Skip generating questions for: {monster_name}, entry {index}. "
+    #         f"Index smaller than start_index {args.start_index}.")
+    #         continue
+    #     LOGGER.info(f"Generating questions for: {monster_name}, entry {index}")
+    #     response = generate_question_set_response(
+    #         context=monster_info, num_of_questions=3
+    #     )
+    #     with open(f"{args.output_dir}{monster_name}.json", "w") as fp:
+    #         json.dump(response, fp)
 
     total_question_set = []
     for filename in output_dir.glob("*.json"):
