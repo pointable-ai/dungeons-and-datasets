@@ -16,6 +16,8 @@ import re
 import openai
 
 LOGGER = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='%(message)s')
+LOGGER.setLevel(logging.DEBUG)
 
 
 QUESTION_EVAL_PROMPT = Template(
@@ -67,8 +69,8 @@ $context_str
 Given the context information and not prior knowledge.
 Generate only questions based on the below query.
 
-You are a Teacher/Professor. Your task is to create $num questions, and its accompanying answer key, for an quiz/examination that is not multiple choice.
-The questions should be diverse in nature across the document. Restrict the questions to the context information provided.
+You are a Teacher/Professor. Your task is to create $num questions, and its accompanying answer key, for an quiz/examination that is not multiple choice or focused on rote memory.
+The questions should be diverse in nature across the document. Restrict the questions to the context information provided, with context clues to differentiate against similar questions.
 
 Please organize this into a pipe delimited format with columns for the Question, the Answer, and the Information used to arrive at the answer."""
 )
@@ -83,7 +85,7 @@ QuestionSet = namedtuple("QuestionSet", ["question", "answer", "context", "groun
 def format_generated_questions(
     generated_question_sets: Iterable,
     ground_truth: str,
-    deliminter: str = "|",
+    delimiter: str = "|",
     is_include_header: bool = False,
 ) -> List[QuestionSet]:
     if is_include_header:
@@ -91,7 +93,7 @@ def format_generated_questions(
 
     question_set_list = []
     for question_set in generated_question_sets:
-        question_set_components = question_set.split(deliminter)
+        question_set_components = question_set.split(delimiter)
         try:
             question = QuestionSet(*question_set_components, ground_truth)
         except TypeError as e:
@@ -142,7 +144,6 @@ def parse_args():
     )
     parser.add_argument(
         "--generate",
-        type=bool,
         action="store_true",
         help="Whether to perform question generation. Default is to skip question generation.",
         default=False
@@ -177,6 +178,12 @@ def parse_args():
         help="The index to start generating questions.",
         default=0
     )
+    parser.add_argument(
+        "--end_index",
+        type=int,
+        help="The index to stop generating questions, non-inclusive. Default will include the last item.",
+        default=-1
+    )
 
     args = parser.parse_args()
     return args
@@ -204,17 +211,19 @@ if __name__ == "__main__":
     # Question generation for each monster
     # This is the snipping/transformer code for prompting
     if args.generate:
-        for index, monster_item in enumerate(monster_infos.items()):
-            monster_name, monster_info = monster_item
-            if index < args.start_index:
-                print(f"Skip generating questions for: {monster_name}, entry {index}. "
-                f"Index smaller than start_index {args.start_index}.")
-                continue
-            LOGGER.info(f"Generating questions for: {monster_name}, entry {index}")
+        for monster_info in monster_infos[args.start_index:args.end_index]:
+            monster_name = monster_info.get("monster_name")
+            LOGGER.info(f"Generating questions for: {monster_name}")
             response = generate_question_set_response(
                 context=monster_info, num_of_questions=args.num_to_generate
             )
-            with open(f"{args.output_dir}{monster_name}.json", "w") as fp:
+
+            filename = f"{args.output_dir}{monster_name}"
+            filepath = Path(f"{filename}.json")
+            while filepath.exists():
+                filename += "_1"
+                filepath = Path(f"{filename}.json")
+            with open(filepath, "w") as fp:
                 json.dump(response, fp)
 
     # Format and create the list of questions in memory to be outputted
