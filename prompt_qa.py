@@ -134,10 +134,23 @@ def generate_question_set_response(
 def parse_args():
     parser = argparse.ArgumentParser(description="Generates questions for a set of knowledge base using an LLM.")
     parser.add_argument(
+        "--generate",
+        type=bool,
+        action="store_true",
+        help="Whether to perform question generation. Default is to skip question generation.",
+        default=False
+    )
+    parser.add_argument(
         "--input_json",
         type=str,
         help="The json to input for question generation.",
         default="monster_text.json"
+    )
+    parser.add_argument(
+        "--num_to_generate",
+        type=int,
+        help="The number of questions to generate per prompt.",
+        default=2
     )
     parser.add_argument(
         "--output_dir",
@@ -154,15 +167,8 @@ def parse_args():
     parser.add_argument(
         "--start_index",
         type=int,
-        help="The index to start processing.",
+        help="The index to start generating questions.",
         default=0
-    )
-    parser.add_argument(
-        "--generate",
-        type=bool,
-        action="store_true",
-        help="The index to start processing.",
-        default=False
     )
 
     args = parser.parse_args()
@@ -198,7 +204,7 @@ if __name__ == "__main__":
                 continue
             LOGGER.info(f"Generating questions for: {monster_name}, entry {index}")
             response = generate_question_set_response(
-                context=monster_info, num_of_questions=3
+                context=monster_info, num_of_questions=args.num_to_generate
             )
             with open(f"{args.output_dir}{monster_name}.json", "w") as fp:
                 json.dump(response, fp)
