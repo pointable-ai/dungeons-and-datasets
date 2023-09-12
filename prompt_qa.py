@@ -3,6 +3,7 @@ from pathlib import Path
 from string import Template
 from typing import Dict, Iterable, List
 import argparse
+import csv
 import json
 import logging
 import re
@@ -71,11 +72,12 @@ Please organize this into a pipe delimited format with columns for the Question,
 SAMPLE = 'Question\tAnswer\tInformation Used\n1. What special abilities does the ancient deep crow possess?\tThe ancient deep crow has the special abilities "Magic Resistance" and "Shadow Stealth".\t- Special abilities listed in the context information.\n2. What is the saving throw DC for the ancient deep crow\'s Shadow Caw ability?\tThe saving throw DC for the ancient deep crow\'s Shadow Caw ability is 17.\t- Shadow Caw ability details in the context information.\n3. What condition can the ancient deep crow inflict on a target with its mandibles? The ancient deep crow can inflict the "restrained" condition on a target with its mandibles.\t- Mandibles ability details in the context information.'
 
 
-QuestionSet = namedtuple("QuestionSet", ["question", "answer", "context"])
+QuestionSet = namedtuple("QuestionSet", ["question", "answer", "context", "ground_truth"])
 
 
 def format_generated_questions(
     generated_question_sets: Iterable,
+    ground_truth: str,
     deliminter: str = "|",
     is_include_header: bool = False,
 ) -> List[QuestionSet]:
@@ -86,7 +88,7 @@ def format_generated_questions(
     for question_set in generated_question_sets:
         question_set_components = question_set.split(deliminter)
         try:
-            question = QuestionSet(*question_set_components)
+            question = QuestionSet(*question_set_components, ground_truth)
         except TypeError as e:
             LOGGER.warning(
                 "Question cannot be processed. This is likely a missing delimiter in response. "
@@ -147,19 +149,20 @@ if __name__ == "__main__":
     if not output_dir.is_dir():
         LOGGER.error(f"{output_dir} is not an existing directory. Please create it before trying to put files into it.")
 
-    # Question generation for each monster
+    # # Question generation for each monster
     # n = 0
-    # for monster_name, monster_info in monster_infos.items():
-    #     response = generate_question_set_response(
-    #         context=monster_info, num_of_questions=2
-    #     )
-    #     with open(f"{args.output_dir}{monster_name}.json", "w") as fp:
-    #         json.dump(response, fp)
+    for monster_name, monster_info in monster_infos.items():
+        response = generate_question_set_response(
+            context=monster_info, num_of_questions=3
+        )
+        with open(f"{args.output_dir}{monster_name}.json", "w") as fp:
+            json.dump(response, fp)
     #     # Temp stop gag
-    #     if n == 0:
+    #     if n == 5:
     #         break
     #     n += 1
 
+    total_question_set = []
     for filename in output_dir.glob("*.json"):
         with open(filename, "r") as fp:
             prompt_response = json.load(fp)
@@ -171,5 +174,13 @@ if __name__ == "__main__":
         except (KeyError, TypeError) as e:
             LOGGER.warning(f"Failed processing {filename}. See error:\n{e}")
         content_list = content.split("\n")
-        print(format_generated_questions(content_list[1:]))
-        # break
+        question_set_list = format_generated_questions(content_list[1:], ground_truth=filename)
+        total_question_set.extend(question_set_list)
+
+    header = content_list[0].split("|")
+    header.append("ground_truth")
+    with open("total_question.csv", "w") as fp:
+        writer = csv.writer(fp, delimiter="|")
+        writer.writerow(header)
+        for question in total_question_set:
+            writer.writerow([question.question, question.answer, question.context, question.ground_truth])
