@@ -5,6 +5,7 @@ from typing import Dict, Iterable, List
 import argparse
 import json
 import logging
+import re
 
 import openai
 
@@ -49,7 +50,7 @@ QA_EVAL_PROMPT = Template(
     Answer:"""
 )
 
-# Note that a TSV is generated
+# Note that a pipe deliminted report is generated
 QUESTION_GENERATION_PROMPT = Template(
     """Context information is below.
 
@@ -63,7 +64,7 @@ Generate only questions based on the below query.
 You are a Teacher/Professor. Your task is to create $num questions and an answer key for an quiz/examination that is not multiple choice.
 The questions should be diverse in nature across the document. Restrict the questions to the context information provided.
 
-Please organize this into a pipe-delimited format with columns for the Question, the Answer, and the Information used to arrive at the answer."""
+Please organize this into a pipe delimited format with columns for the Question, the Answer, and the Information used to arrive at the answer."""
 )
 
 
@@ -92,6 +93,15 @@ def format_generated_questions(
                 f"\nQuestion:\n{question_set_components}"
             )
             continue
+
+        # Simplistic filter to remove results without alphanumerics
+        match = re.search("\w+", question.question)
+        if not match:
+            LOGGER.warning(
+                f"Question not included in results since no alphanumerics were found: {question}"
+            )
+            continue
+
         question_set_list.append(question)
 
     return question_set_list
@@ -138,17 +148,17 @@ if __name__ == "__main__":
         LOGGER.error(f"{output_dir} is not an existing directory. Please create it before trying to put files into it.")
 
     # Question generation for each monster
-    n = 0
-    for monster_name, monster_info in monster_infos.items():
-        response = generate_question_set_response(
-            context=monster_info, num_of_questions=2
-        )
-        with open(f"{args.output_dir}{monster_name}.json", "w") as fp:
-            json.dump(response, fp)
-        # Temp stop gag
-        if n == 5:
-            break
-        n += 1
+    # n = 0
+    # for monster_name, monster_info in monster_infos.items():
+    #     response = generate_question_set_response(
+    #         context=monster_info, num_of_questions=2
+    #     )
+    #     with open(f"{args.output_dir}{monster_name}.json", "w") as fp:
+    #         json.dump(response, fp)
+    #     # Temp stop gag
+    #     if n == 0:
+    #         break
+    #     n += 1
 
     for filename in output_dir.glob("*.json"):
         with open(filename, "r") as fp:
