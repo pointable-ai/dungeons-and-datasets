@@ -1,5 +1,6 @@
 from collections import namedtuple
 from pathlib import Path
+from pprint import pformat
 from string import Template
 from typing import Dict, Iterable, List
 import argparse
@@ -91,8 +92,10 @@ def format_generated_questions(
             question = QuestionSet(*question_set_components, ground_truth)
         except TypeError as e:
             LOGGER.warning(
-                "Question cannot be processed. This is likely a missing delimiter in response. "
-                f"\nQuestion:\n{question_set_components}"
+                f"""Question cannot be processed. This is likely a missing or extra delimiter in the response.
+                Question: {pformat(question_set_components)}
+                Error: {e}
+                Ground Truth: {ground_truth}\n"""
             )
             continue
 
