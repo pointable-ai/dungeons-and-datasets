@@ -16,7 +16,7 @@ import re
 import openai
 
 LOGGER = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format='%(message)s')
+logging.basicConfig(level=logging.INFO, format="%(message)s")
 LOGGER.setLevel(logging.DEBUG)
 
 
@@ -66,20 +66,26 @@ QUESTION_GENERATION_PROMPT = Template(
 $context_str
 ---------------------
 
-Given the context information and not prior knowledge.
-Generate only questions based on the below query.
+Given the context information and not prior knowledge. Generate only questions based on the below query.
 
-You are a Teacher/Professor. Your task is to create $num questions, and its accompanying answer key, for an quiz/examination that is not multiple choice or focused on rote memory.
-The questions should be diverse in nature across the document. Restrict the questions to the context information provided, with context clues to differentiate against similar questions.
+Your task is to create $num questions and the answer key for a quiz/examination where there is one answer per one question.
 
-Please organize this into a pipe delimited format with columns for the Question, the Answer, and the Information used to arrive at the answer."""
+The questions should follow the below constraints:
+- The questions should be diverse in nature across the context provided.
+- The questions are to be restricted to the context information provided.
+- When referring to the context information, the question should add contextual clues make it as unambiguous as possible.
+- Question and answer sets should have objective answers.
+
+Please organize this into a delimited format using "$delimiter", with columns for the Question, the Answer, and the Information used to arrive at the answer."""
 )
 
 
 SAMPLE = 'Question\tAnswer\tInformation Used\n1. What special abilities does the ancient deep crow possess?\tThe ancient deep crow has the special abilities "Magic Resistance" and "Shadow Stealth".\t- Special abilities listed in the context information.\n2. What is the saving throw DC for the ancient deep crow\'s Shadow Caw ability?\tThe saving throw DC for the ancient deep crow\'s Shadow Caw ability is 17.\t- Shadow Caw ability details in the context information.\n3. What condition can the ancient deep crow inflict on a target with its mandibles? The ancient deep crow can inflict the "restrained" condition on a target with its mandibles.\t- Mandibles ability details in the context information.'
 
 
-QuestionSet = namedtuple("QuestionSet", ["question", "answer", "context", "ground_truth"])
+QuestionSet = namedtuple(
+    "QuestionSet", ["question", "answer", "context", "ground_truth"]
+)
 
 
 def format_generated_questions(
@@ -119,15 +125,29 @@ def format_generated_questions(
 
 
 def generate_question_set_response(
-    context: str, num_of_questions: int, llm_model: str = "gpt-3.5-turbo"
+    context: str,
+    focus: str,
+    num_of_questions: int,
+    delimiter: str = ";",
+    llm_model: str = "gpt-3.5-turbo",
 ) -> Dict:
     # TODO: there's a bug when num_of_questions is 1; the llm will respond with a 1 "set" of questions, which is more than 1 question
     question_prompt = QUESTION_GENERATION_PROMPT.substitute(
-        context_str=context, num=num_of_questions
+        context_str=context,
+        focus_str=focus,
+        num=num_of_questions,
+        delimiter=delimiter,
     )
     # TODO: this should be hotswappable
     response = openai.ChatCompletion.create(
-        model=llm_model, messages=[{"role": "user", "content": question_prompt}]
+        model=llm_model,
+        messages=[
+            {
+                "role": "system",
+                "content": "You are a test writer/professor writing exam questions.",
+            },
+            {"role": "user", "content": question_prompt},
+        ],
     )
     response_dict = response.to_dict()
     response_dict["generation_prompt"] = question_prompt
@@ -135,54 +155,56 @@ def generate_question_set_response(
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Generates questions for a set of knowledge base using an LLM.")
+    parser = argparse.ArgumentParser(
+        description="Generates questions for a set of knowledge base using an LLM."
+    )
     parser.add_argument(
         "--delimiter",
         type=str,
-        help="The delimiter to be used for prompting and formatting.",
-        default="|"
+        help="The delimiter to be used for prompting and formatting. Note: Semicolons do not work very well with question generation.",
+        default="|",
     )
     parser.add_argument(
         "--generate",
         action="store_true",
         help="Whether to perform question generation. Default is to skip question generation.",
-        default=False
+        default=False,
     )
     parser.add_argument(
         "--input_json",
         type=str,
         help="The json to input for question generation.",
-        default="monster_text.json"
+        default="monster_text.json",
     )
     parser.add_argument(
         "--num_to_generate",
         type=int,
         help="The number of questions to generate per prompt.",
-        default=2
+        default=2,
     )
     parser.add_argument(
         "--output_dir",
         type=str,
         help="The dir to output the results of the requests.",
-        default="generated_questions/"
+        default="generated_questions/",
     )
     parser.add_argument(
         "--output_file",
         type=str,
         help="The final file to output the results of processing questions from requests.",
-        default="total_question.csv"
+        default="total_question.csv",
     )
     parser.add_argument(
         "--start_index",
         type=int,
         help="The index to start generating questions.",
-        default=0
+        default=0,
     )
     parser.add_argument(
         "--end_index",
         type=int,
         help="The index to stop generating questions, non-inclusive. Default will include the last item.",
-        default=-1
+        default=-1,
     )
 
     args = parser.parse_args()
@@ -196,7 +218,9 @@ if __name__ == "__main__":
     # This expects monster_text in the old style (prior to langchain processing) where it's monster name as key and info as content
     input_json = Path(args.input_json)
     if not input_json.is_file:
-        LOGGER.error(f"{input_json} is not a file. Please make sure you have the correct filepath or name.")
+        LOGGER.error(
+            f"{input_json} is not a file. Please make sure you have the correct filepath or name."
+        )
         exit()
 
     with open(args.input_json, "r") as fp:
@@ -205,17 +229,22 @@ if __name__ == "__main__":
     # Where generated responses from openai will go
     output_dir = Path(args.output_dir)
     if not output_dir.is_dir():
-        LOGGER.error(f"{output_dir} is not an existing directory. Please create it before trying to put files into it.")
+        LOGGER.error(
+            f"{output_dir} is not an existing directory. Please create it before trying to put files into it."
+        )
         exit()
 
     # Question generation for each monster
     # This is the snipping/transformer code for prompting
     if args.generate:
-        for monster_info in monster_infos[args.start_index:args.end_index]:
+        for monster_info in monster_infos[args.start_index : args.end_index]:
             monster_name = monster_info.get("monster_name")
             LOGGER.info(f"Generating questions for: {monster_name}")
             response = generate_question_set_response(
-                context=monster_info, num_of_questions=args.num_to_generate
+                context=monster_info,
+                focus=monster_name,
+                num_of_questions=args.num_to_generate,
+                delimiter=args.delimiter,
             )
 
             filename = f"{args.output_dir}{monster_name}"
@@ -240,7 +269,10 @@ if __name__ == "__main__":
             LOGGER.warning(f"Failed processing {filename}. See error:\n{e}")
         content_list = content.split("\n")
         question_set_list = format_generated_questions(
-            generated_question_sets=content_list[1:], ground_truth=filename, delimiter=args.delimiter)
+            generated_question_sets=content_list[1:],
+            ground_truth=filename,
+            delimiter=args.delimiter,
+        )
         total_question_set.extend(question_set_list)
 
     # TODO: deal with this ad hoc header stuff in a better way
@@ -253,4 +285,11 @@ if __name__ == "__main__":
         writer = csv.writer(fp, delimiter=args.delimiter)
         writer.writerow(header)
         for question in total_question_set:
-            writer.writerow([question.question, question.answer, question.context, question.ground_truth])
+            writer.writerow(
+                [
+                    question.question,
+                    question.answer,
+                    question.context,
+                    question.ground_truth,
+                ]
+            )
