@@ -126,7 +126,11 @@ Please organize this into a delimited format using "$delimiter", with columns fo
 
 QuestionSet = namedtuple(
     "QuestionSet",
-    ["question", "answer", "prompt_context", "ground_truth", "original_context"],
+    ["question", "answer", "generation_prompt", "ground_truth", "original_context"],
+)
+EvalSet = namedtuple(
+    "EvalSet",
+    ["question", "answer", "generation_prompt", "ground_truth", "original_context", "evaluation"],
 )
 
 
@@ -273,22 +277,49 @@ def parse_and_aggregate_generated_questions(args):
 
     total_question_set = load_generated_questions(output_dir)
 
-    # TODO: deal with this ad hoc header stuff in a better way
-    header = content_list[0].split(args.delimiter)
-    header.append("ground_truth")
-
     # Output the file with generated and formatted questions
     with open(args.output_file, "w") as fp:
         # TODO: potentially add another arg for output delimiter
         writer = csv.writer(fp, delimiter=args.delimiter)
-        writer.writerow(header)
+        # Writes the _fields as header of the doc
+        writer.writerow(QuestionSet._fields)
         for question in total_question_set:
             writer.writerow(
                 [
                     question.question,
                     question.answer,
-                    question.prompt_context,
+                    question.generation_prompt,
                     question.ground_truth,
+                    question.original_context
+                ]
+            )
+
+
+def parse_and_aggregate_evaluation(args):
+    output_dir = Path(args.output_dir)
+    if not output_dir.is_dir():
+        LOGGER.error(
+            f"{output_dir} is not an existing directory. Please create it before trying to put files into it."
+        )
+        exit()
+
+    total_eval_set = load_generated_evals(output_dir)
+
+    # Output the file with generated and formatted questions
+    with open(args.output_file, "w") as fp:
+        # TODO: potentially add another arg for output delimiter
+        writer = csv.writer(fp, delimiter=args.delimiter)
+        # Writes the _fields as header of the doc
+        writer.writerow(EvalSet._fields)
+        for evaluation in total_eval_set:
+            writer.writerow(
+                [
+                    evaluation.question,
+                    evaluation.answer,
+                    evaluation.generation_prompt,
+                    evaluation.ground_truth,
+                    evaluation.original_context,
+                    evaluation.evaluation
                 ]
             )
 
@@ -311,15 +342,15 @@ def evaluate_questions_and_save_response(args):
         # Write contexts to the prompt response
         response["question"] = question_set.question
         response["answer"] = question_set.answer
-        response["prompt_context"] = question_set.original_context
+        response["original_context"] = question_set.original_context
 
-        filepath = _get_eval_filename(Path(question_set.ground_truth))
+        filepath = _get_eval_filename(Path(question_set.ground_truth), response["id"])
         with open(filepath, "w") as fp:
             json.dump(response, fp)
 
 
-def _get_eval_filename(filepath: Path) -> Path:
-    filename = filepath.stem + "_eval.json"
+def _get_eval_filename(filepath: Path, uuid: str) -> Path:
+    filename = filepath.stem + f"_eval_{uuid}.json"
     return filepath.parent.joinpath(filename)
 
 
@@ -351,6 +382,38 @@ def load_generated_questions(output_dir: Path, glob_pattern: str = "*[!_eval].js
     return total_question_set
 
 
+def load_generated_evals(output_dir: Path, glob_pattern: str = "*_eval*.json"):
+    """Format and create the list of questions from file into memory.
+    glob_pattern default ignores the eval files"""
+
+    total_eval_set = []
+    for filename in output_dir.glob(glob_pattern):
+        with open(filename, "r") as fp:
+            prompt_response = json.load(fp)
+        try:
+            choices = prompt_response["choices"]
+            choice = choices[0]
+            message = choice["message"]
+
+            # Prior are content set ups, rest of these are the vars that we will use
+            evaluation = message["content"]
+            original_context = prompt_response["original_context"]
+            generation_prompt = prompt_response["generation_prompt"]
+            question = prompt_response["question"]
+            answer = prompt_response["answer"]
+
+        except (KeyError, TypeError) as e:
+            LOGGER.warning(f"Failed processing {filename}. See error:\n{e}")
+
+        eval_set = EvalSet(
+            question, answer, generation_prompt, filename, original_context, evaluation
+        )
+\
+        total_eval_set.append(eval_set)
+
+    return total_eval_set
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Generates questions for a set of knowledge base using an LLM."
@@ -362,15 +425,27 @@ def parse_args():
         default="|",
     )
     parser.add_argument(
-        "--evaluate",
+        "--eval",
         action="store_true",
         help="Whether to perform question evaluation. Default is to skip question evaluation.",
+        default=False,
+    )
+    parser.add_argument(
+        "--eval_parse",
+        action="store_true",
+        help="Whether to parse evaluations. Default is to skip parsing.",
         default=False,
     )
     parser.add_argument(
         "--generate",
         action="store_true",
         help="Whether to perform question generation. Default is to skip question generation.",
+        default=False,
+    )
+    parser.add_argument(
+        "--generate_parse",
+        action="store_true",
+        help="Whether to parse generated questions. Default is to skip parsing.",
         default=False,
     )
     parser.add_argument(
@@ -398,12 +473,6 @@ def parse_args():
         default="total_question.csv",
     )
     parser.add_argument(
-        "--parse",
-        action="store_true",
-        help="Whether to parse generated questions. Default is to skip question parsing.",
-        default=False,
-    )
-    parser.add_argument(
         "--start_index",
         type=int,
         help="The index to start generating questions.",
@@ -427,8 +496,11 @@ if __name__ == "__main__":
     if args.generate:
         generate_questions_and_save_response(args)
 
-    if args.parse:
+    if args.generate_parse:
         parse_and_aggregate_generated_questions(args)
 
-    if args.evaluate:
+    if args.eval:
         evaluate_questions_and_save_response(args)
+
+    if args.eval_parse:
+        parse_and_aggregate_evaluation(args)
