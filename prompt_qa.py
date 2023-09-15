@@ -272,6 +272,7 @@ def generate_and_save_questions(args):
 
 def parse_and_aggregate_generated_questions(args):
     # Where generated responses from openai will go
+
     output_dir = Path(args.output_dir)
     if not output_dir.is_dir():
         LOGGER.error(
@@ -279,6 +280,29 @@ def parse_and_aggregate_generated_questions(args):
         )
         exit()
 
+    total_question_set = load_generated_questions(output_dir)
+
+    # TODO: deal with this ad hoc header stuff in a better way
+    header = content_list[0].split(args.delimiter)
+    header.append("ground_truth")
+
+    # Output the file with generated and formatted questions
+    with open(args.output_file, "w") as fp:
+        # TODO: potentially add another arg for output delimiter
+        writer = csv.writer(fp, delimiter=args.delimiter)
+        writer.writerow(header)
+        for question in total_question_set:
+            writer.writerow(
+                [
+                    question.question,
+                    question.answer,
+                    question.context,
+                    question.ground_truth,
+                ]
+            )
+
+
+def load_generated_questions(output_dir: Path):
     # Format and create the list of questions in memory to be outputted
     total_question_set = []
     for filename in output_dir.glob("*.json"):
@@ -299,24 +323,7 @@ def parse_and_aggregate_generated_questions(args):
         )
         total_question_set.extend(question_set_list)
 
-    # TODO: deal with this ad hoc header stuff in a better way
-    header = content_list[0].split(args.delimiter)
-    header.append("ground_truth")
-
-    # Output the file with generated and formatted questions
-    with open(args.output_file, "w") as fp:
-        # TODO: potentially add another arg for output delimiter
-        writer = csv.writer(fp, delimiter=args.delimiter)
-        writer.writerow(header)
-        for question in total_question_set:
-            writer.writerow(
-                [
-                    question.question,
-                    question.answer,
-                    question.context,
-                    question.ground_truth,
-                ]
-            )
+    return total_question_set
 
 
 # This is "throwaway" code for the D&D dataset
