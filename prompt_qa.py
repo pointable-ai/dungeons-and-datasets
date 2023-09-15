@@ -124,9 +124,6 @@ Please organize this into a delimited format using "$delimiter", with columns fo
 )
 
 
-SAMPLE = 'Question\tAnswer\tInformation Used\n1. What special abilities does the ancient deep crow possess?\tThe ancient deep crow has the special abilities "Magic Resistance" and "Shadow Stealth".\t- Special abilities listed in the context information.\n2. What is the saving throw DC for the ancient deep crow\'s Shadow Caw ability?\tThe saving throw DC for the ancient deep crow\'s Shadow Caw ability is 17.\t- Shadow Caw ability details in the context information.\n3. What condition can the ancient deep crow inflict on a target with its mandibles? The ancient deep crow can inflict the "restrained" condition on a target with its mandibles.\t- Mandibles ability details in the context information.'
-
-
 QuestionSet = namedtuple(
     "QuestionSet",
     ["question", "answer", "prompt_context", "ground_truth", "original_context"],
@@ -229,6 +226,131 @@ def generate_question_eval_response(
     return response_dict
 
 
+def generate_questions_and_save_response(args):
+    # This expects monster_text in the old style (prior to langchain processing) where it's monster name as key and info as content
+    input_json = Path(args.input_json)
+    if not input_json.is_file:
+        LOGGER.error(
+            f"{input_json} is not a file. Please make sure you have the correct filepath or name."
+        )
+        exit()
+
+    with open(args.input_json, "r") as fp:
+        monster_infos = json.load(fp)
+
+    # Where generated responses from openai will go
+    output_dir = Path(args.output_dir)
+    if not output_dir.is_dir():
+        LOGGER.error(
+            f"{output_dir} is not an existing directory. Please create it before trying to put files into it."
+        )
+        exit()
+
+    # Question generation for each monster
+    # This is the snipping/transformer code for prompting
+    for monster_info in monster_infos[args.start_index : args.end_index]:
+        monster_name = monster_info.get("monster_name")
+        LOGGER.info(f"Generating questions for: {monster_name}")
+        response = generate_question_set_response(
+            context=monster_info,
+            num_of_questions=args.num_to_generate,
+            delimiter=args.delimiter,
+        )
+
+        filename = f"{args.output_dir}{monster_name}_{response['id']}"
+        filepath = Path(f"{filename}.json")
+        with open(filepath, "w") as fp:
+            json.dump(response, fp)
+
+
+def parse_and_aggregate_generated_questions(args):
+    output_dir = Path(args.output_dir)
+    if not output_dir.is_dir():
+        LOGGER.error(
+            f"{output_dir} is not an existing directory. Please create it before trying to put files into it."
+        )
+        exit()
+
+    total_question_set = load_generated_questions(output_dir)
+
+    # TODO: deal with this ad hoc header stuff in a better way
+    header = content_list[0].split(args.delimiter)
+    header.append("ground_truth")
+
+    # Output the file with generated and formatted questions
+    with open(args.output_file, "w") as fp:
+        # TODO: potentially add another arg for output delimiter
+        writer = csv.writer(fp, delimiter=args.delimiter)
+        writer.writerow(header)
+        for question in total_question_set:
+            writer.writerow(
+                [
+                    question.question,
+                    question.answer,
+                    question.prompt_context,
+                    question.ground_truth,
+                ]
+            )
+
+
+def evaluate_questions_and_save_response(args):
+    # Where generated responses from openai will go
+    output_dir = Path(args.output_dir)
+    if not output_dir.is_dir():
+        LOGGER.error(
+            f"{output_dir} is not an existing directory. Please create it before trying to put files into it."
+        )
+        exit()
+
+    total_question_set = load_generated_questions(output_dir)
+
+    for question_set in total_question_set[args.start_index : args.end_index]:
+        LOGGER.info(f"Evaluating questions for: {question_set.ground_truth}")
+        response = generate_question_eval_response(question_set)
+
+        # Write contexts to the prompt response
+        response["question"] = question_set.question
+        response["answer"] = question_set.answer
+        response["prompt_context"] = question_set.original_context
+
+        filepath = _get_eval_filename(Path(question_set.ground_truth))
+        with open(filepath, "w") as fp:
+            json.dump(response, fp)
+
+
+def _get_eval_filename(filepath: Path) -> Path:
+    filename = filepath.stem + "_eval.json"
+    return filepath.parent.joinpath(filename)
+
+
+def load_generated_questions(output_dir: Path, glob_pattern: str = "*[!_eval].json"):
+    """Format and create the list of questions from file into memory.
+    glob_pattern default ignores the eval files"""
+
+    total_question_set = []
+    for filename in output_dir.glob(glob_pattern):
+        with open(filename, "r") as fp:
+            prompt_response = json.load(fp)
+        try:
+            choices = prompt_response["choices"]
+            choice = choices[0]
+            message = choice["message"]
+            content = message["content"]
+            original_context = prompt_response["original_context"]
+        except (KeyError, TypeError) as e:
+            LOGGER.warning(f"Failed processing {filename}. See error:\n{e}")
+        content_list = content.split("\n")
+        question_set_list = format_generated_questions(
+            generated_question_sets=content_list[1:],
+            ground_truth=filename,
+            delimiter=args.delimiter,
+            original_context=original_context,
+        )
+        total_question_set.extend(question_set_list)
+
+    return total_question_set
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Generates questions for a set of knowledge base using an LLM."
@@ -298,129 +420,12 @@ def parse_args():
     return args
 
 
-def generate_and_save_questions(args):
-    # This expects monster_text in the old style (prior to langchain processing) where it's monster name as key and info as content
-    input_json = Path(args.input_json)
-    if not input_json.is_file:
-        LOGGER.error(
-            f"{input_json} is not a file. Please make sure you have the correct filepath or name."
-        )
-        exit()
-
-    with open(args.input_json, "r") as fp:
-        monster_infos = json.load(fp)
-
-    # Where generated responses from openai will go
-    output_dir = Path(args.output_dir)
-    if not output_dir.is_dir():
-        LOGGER.error(
-            f"{output_dir} is not an existing directory. Please create it before trying to put files into it."
-        )
-        exit()
-
-    # Question generation for each monster
-    # This is the snipping/transformer code for prompting
-    for monster_info in monster_infos[args.start_index : args.end_index]:
-        monster_name = monster_info.get("monster_name")
-        LOGGER.info(f"Generating questions for: {monster_name}")
-        response = generate_question_set_response(
-            context=monster_info,
-            num_of_questions=args.num_to_generate,
-            delimiter=args.delimiter,
-        )
-
-        filename = f"{args.output_dir}{monster_name}_{response['id']}"
-        filepath = Path(f"{filename}.json")
-        with open(filepath, "w") as fp:
-            json.dump(response, fp)
-
-
-def parse_and_aggregate_generated_questions(args):
-    # Where generated responses from openai will go
-    output_dir = Path(args.output_dir)
-    if not output_dir.is_dir():
-        LOGGER.error(
-            f"{output_dir} is not an existing directory. Please create it before trying to put files into it."
-        )
-        exit()
-
-    total_question_set = load_generated_questions(output_dir)
-
-    # TODO: deal with this ad hoc header stuff in a better way
-    header = content_list[0].split(args.delimiter)
-    header.append("ground_truth")
-
-    # Output the file with generated and formatted questions
-    with open(args.output_file, "w") as fp:
-        # TODO: potentially add another arg for output delimiter
-        writer = csv.writer(fp, delimiter=args.delimiter)
-        writer.writerow(header)
-        for question in total_question_set:
-            writer.writerow(
-                [
-                    question.question,
-                    question.answer,
-                    question.prompt_context,
-                    question.ground_truth,
-                ]
-            )
-
-
-def evaluate_questions_and_save_response(args):
-    # Where generated responses from openai will go
-    output_dir = Path(args.output_dir)
-    if not output_dir.is_dir():
-        LOGGER.error(
-            f"{output_dir} is not an existing directory. Please create it before trying to put files into it."
-        )
-        exit()
-
-    total_question_set = load_generated_questions(output_dir)
-
-    for question_set in total_question_set[args.start_index : args.end_index]:
-        LOGGER.info(f"Evaluating questions for: {question_set.ground_truth}")
-        response = generate_question_eval_response(question_set)
-
-        response["question"] = question_set.question
-        response["answer"] = question_set.answer
-        response["prompt_context"] = question_set.original_context
-        filepath = Path(question_set.ground_truth)
-        with open(f"{output_dir}/{filepath.stem}_eval.json", "w") as fp:
-            json.dump(response, fp)
-
-
-def load_generated_questions(output_dir: Path):
-    # Format and create the list of questions in memory to be outputted
-    total_question_set = []
-    for filename in output_dir.glob("*.json"):
-        with open(filename, "r") as fp:
-            prompt_response = json.load(fp)
-        try:
-            choices = prompt_response.get("choices")
-            choice = choices[0]
-            message = choice.get("message")
-            content = message.get("content")
-            original_context = prompt_response.get("original_context")
-        except (KeyError, TypeError) as e:
-            LOGGER.warning(f"Failed processing {filename}. See error:\n{e}")
-        content_list = content.split("\n")
-        question_set_list = format_generated_questions(
-            generated_question_sets=content_list[1:],
-            ground_truth=filename,
-            delimiter=args.delimiter,
-            original_context=original_context,
-        )
-        total_question_set.extend(question_set_list)
-
-    return total_question_set
-
-
 # This is "throwaway" code for the D&D dataset
 if __name__ == "__main__":
     args = parse_args()
 
     if args.generate:
-        generate_and_save_questions(args)
+        generate_questions_and_save_response(args)
 
     if args.parse:
         parse_and_aggregate_generated_questions(args)
