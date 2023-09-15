@@ -195,6 +195,12 @@ def parse_args():
         default="total_question.csv",
     )
     parser.add_argument(
+        "--parse",
+        action="store_true",
+        help="Whether to parse generated questions. Default is to skip question parsing.",
+        default=False,
+    )
+    parser.add_argument(
         "--start_index",
         type=int,
         help="The index to start generating questions.",
@@ -211,10 +217,7 @@ def parse_args():
     return args
 
 
-# This is "throwaway" code for the D&D dataset
-if __name__ == "__main__":
-    args = parse_args()
-
+def generate_and_save_questions(args):
     # This expects monster_text in the old style (prior to langchain processing) where it's monster name as key and info as content
     input_json = Path(args.input_json)
     if not input_json.is_file:
@@ -255,6 +258,16 @@ if __name__ == "__main__":
             with open(filepath, "w") as fp:
                 json.dump(response, fp)
 
+
+def parse_and_aggregate_generated_questions(args):
+    # Where generated responses from openai will go
+    output_dir = Path(args.output_dir)
+    if not output_dir.is_dir():
+        LOGGER.error(
+            f"{output_dir} is not an existing directory. Please create it before trying to put files into it."
+        )
+        exit()
+
     # Format and create the list of questions in memory to be outputted
     total_question_set = []
     for filename in output_dir.glob("*.json"):
@@ -293,3 +306,14 @@ if __name__ == "__main__":
                     question.ground_truth,
                 ]
             )
+
+
+# This is "throwaway" code for the D&D dataset
+if __name__ == "__main__":
+    args = parse_args()
+
+    if args.generate:
+        generate_and_save_questions(args)
+
+    if args.parse:
+        parse_and_aggregate_generated_questions(args)
