@@ -29,29 +29,28 @@ DELIMITER_ENGLISH = {
 }
 
 QUESTION_EVAL_PROMPT = Template(
-    """Please tell if a given piece of Information is supported by the context.
+    """Please determine if a Question is supported by the context and fair to ask someone who does not have access to the exact context.
 You need to answer with either YES or NO.
-Answer YES if any of the context supports the Information, even if most of the context is unrelated. If the context
-cannot be answered with a YES or NO, the answer is NO. If the Information uses the exact words 'the context',
-the answer is NO.
+Answer YES if any of the context supports the Question, even if most of the context is unrelated. If the you
+cannot answer with a YES or NO, the answer is NO.
 
 Some examples are provided below.
 
-Information: Apple pie is generally double-crusted.
+Information: Is an Apple pie is generally double-crusted?
 Context: An apple pie is a fruit pie in which the principal filling ingredient is apples.
 Apple pie is often served with whipped cream, ice cream ('apple pie à la mode'), custard or cheddar cheese.
 It is generally double-crusted, with pastry both above and below the filling; the upper crust may be solid or
 latticed (woven of crosswise strips).
 Answer: YES
 
-Information: Apple pies tastes bad.
+Information: Does Apple pies taste bad?
 Context: An apple pie is a fruit pie in which the principal filling ingredient is apples.
 Apple pie is often served with whipped cream, ice cream ('apple pie à la mode'), custard or cheddar cheese.
 It is generally double-crusted, with pastry both above and below the filling; the upper crust may be solid or
 latticed (woven of crosswise strips).
 Answer: NO
 
-Information: The context says apple can be pies.
+Information: Does the context say apple can be pies?
 Context: An apple pie is a fruit pie in which the principal filling ingredient is apples.
 Apple pie is often served with whipped cream, ice cream ('apple pie à la mode'), custard or cheddar cheese.
 It is generally double-crusted, with pastry both above and below the filling; the upper crust may be solid or
@@ -71,21 +70,39 @@ Answer:"""
 )
 
 
-QA_EVAL_PROMPT = Template(
-    """
-    Your task is to evaluate if the response for the query is in line with the context information provided.
-    You have two options to answer. Either YES/NO.
-    Answer - YES, if the response for the query is in line with context information otherwise NO.
-    Query and Response:
-    $query_str
+GENERIC_EVAL_PROMPT = Template(
+    """Please tell if a given piece of Information is supported by the context.
+You need to answer with either YES or NO.
+Answer YES if any of the context supports the Information, even if most of the context is unrelated.
 
-    Context:
-    $context_str
+Some examples are provided below.
 
-    Answer:"""
+Information: Apple pie is generally double-crusted.
+Context: An apple pie is a fruit pie in which the principal filling ingredient is apples.
+Apple pie is often served with whipped cream, ice cream ('apple pie à la mode'), custard or cheddar cheese.
+It is generally double-crusted, with pastry both above and below the filling; the upper crust may be solid or
+latticed (woven of crosswise strips).
+Answer: YES
+
+Information: Apple pies tastes bad.
+Context: An apple pie is a fruit pie in which the principal filling ingredient is apples.
+Apple pie is often served with whipped cream, ice cream ('apple pie à la mode'), custard or cheddar cheese.
+It is generally double-crusted, with pastry both above and below the filling; the upper crust may be solid or
+latticed (woven of crosswise strips).
+Answer: NO
+
+Information:
+---------------
+$query_str
+---------------
+
+Context:
+---------------
+$context_str
+---------------
+Answer:"""
 )
 
-# Note that a pipe deliminted report is generated
 QUESTION_GENERATION_PROMPT = Template(
     """Context information is below.
 
