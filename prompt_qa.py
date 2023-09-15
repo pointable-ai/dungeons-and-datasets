@@ -250,29 +250,27 @@ def generate_and_save_questions(args):
 
     # Question generation for each monster
     # This is the snipping/transformer code for prompting
-    if args.generate:
-        for monster_info in monster_infos[args.start_index : args.end_index]:
-            monster_name = monster_info.get("monster_name")
-            LOGGER.info(f"Generating questions for: {monster_name}")
-            response = generate_question_set_response(
-                context=monster_info,
-                focus=monster_name,
-                num_of_questions=args.num_to_generate,
-                delimiter=args.delimiter,
-            )
+    for monster_info in monster_infos[args.start_index : args.end_index]:
+        monster_name = monster_info.get("monster_name")
+        LOGGER.info(f"Generating questions for: {monster_name}")
+        response = generate_question_set_response(
+            context=monster_info,
+            focus=monster_name,
+            num_of_questions=args.num_to_generate,
+            delimiter=args.delimiter,
+        )
 
-            filename = f"{args.output_dir}{monster_name}"
+        filename = f"{args.output_dir}{monster_name}"
+        filepath = Path(f"{filename}.json")
+        while filepath.exists():
+            filename += "_1"
             filepath = Path(f"{filename}.json")
-            while filepath.exists():
-                filename += "_1"
-                filepath = Path(f"{filename}.json")
-            with open(filepath, "w") as fp:
-                json.dump(response, fp)
+        with open(filepath, "w") as fp:
+            json.dump(response, fp)
 
 
 def parse_and_aggregate_generated_questions(args):
     # Where generated responses from openai will go
-
     output_dir = Path(args.output_dir)
     if not output_dir.is_dir():
         LOGGER.error(
