@@ -29,11 +29,11 @@ DELIMITER_ENGLISH = {
 }
 
 QUESTION_EVAL_PROMPT = Template(
-    """Please tell if a given piece of information is supported by the context.
+    """Please tell if a given piece of Information is supported by the context.
 You need to answer with either YES or NO.
-Answer YES if any of the context supports the information, even if most of the context is unrelated. If the context
-cannot be answered with a YES or NO, the answer is NO. If the information cannot be established without the context
-being present to the reader, the answer is NO.
+Answer YES if any of the context supports the Information, even if most of the context is unrelated. If the context
+cannot be answered with a YES or NO, the answer is NO. If the Information uses the exact words 'the context',
+the answer is NO.
 
 Some examples are provided below.
 
@@ -45,6 +45,13 @@ latticed (woven of crosswise strips).
 Answer: YES
 
 Information: Apple pies tastes bad.
+Context: An apple pie is a fruit pie in which the principal filling ingredient is apples.
+Apple pie is often served with whipped cream, ice cream ('apple pie à la mode'), custard or cheddar cheese.
+It is generally double-crusted, with pastry both above and below the filling; the upper crust may be solid or
+latticed (woven of crosswise strips).
+Answer: NO
+
+Information: The context says apple can be pies.
 Context: An apple pie is a fruit pie in which the principal filling ingredient is apples.
 Apple pie is often served with whipped cream, ice cream ('apple pie à la mode'), custard or cheddar cheese.
 It is generally double-crusted, with pastry both above and below the filling; the upper crust may be solid or
@@ -358,6 +365,7 @@ def evaluate_questions_and_save_response(args):
         response = generate_question_eval_response(question_set)
 
         response["question"] = question_set.question
+        response["answer"] = question_set.answer
         response["prompt_context"] = question_set.original_context
         filepath = Path(question_set.ground_truth)
         with open(f"{output_dir}/{filepath.stem}_eval.json", "w") as fp:
