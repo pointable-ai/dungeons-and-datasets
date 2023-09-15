@@ -260,11 +260,8 @@ def generate_and_save_questions(args):
             delimiter=args.delimiter,
         )
 
-        filename = f"{args.output_dir}{monster_name}"
+        filename = f"{args.output_dir}{monster_name}_{response['id']}"
         filepath = Path(f"{filename}.json")
-        while filepath.exists():
-            filename += "_1"
-            filepath = Path(f"{filename}.json")
         with open(filepath, "w") as fp:
             json.dump(response, fp)
 
