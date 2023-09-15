@@ -17,7 +17,7 @@ import openai
 
 LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(message)s")
-LOGGER.setLevel(logging.DEBUG)
+LOGGER.setLevel(logging.INFO)
 
 
 DELIMITER_ENGLISH = {
@@ -31,7 +31,11 @@ DELIMITER_ENGLISH = {
 QUESTION_EVAL_PROMPT = Template(
     """Please tell if a given piece of information is supported by the context.
 You need to answer with either YES or NO.
-Answer YES if any of the context supports the information, even if most of the context is unrelated. Some examples are provided below.
+Answer YES if any of the context supports the information, even if most of the context is unrelated. If the context
+cannot be answered with a YES or NO, the answer is NO. If the information cannot be established without the context
+being present to the reader, the answer is NO.
+
+Some examples are provided below.
 
 Information: Apple pie is generally double-crusted.
 Context: An apple pie is a fruit pie in which the principal filling ingredient is apples.
@@ -39,6 +43,7 @@ Apple pie is often served with whipped cream, ice cream ('apple pie à la mode')
 It is generally double-crusted, with pastry both above and below the filling; the upper crust may be solid or
 latticed (woven of crosswise strips).
 Answer: YES
+
 Information: Apple pies tastes bad.
 Context: An apple pie is a fruit pie in which the principal filling ingredient is apples.
 Apple pie is often served with whipped cream, ice cream ('apple pie à la mode'), custard or cheddar cheese.
@@ -46,8 +51,15 @@ It is generally double-crusted, with pastry both above and below the filling; th
 latticed (woven of crosswise strips).
 Answer: NO
 
-Information: $query_str
-Context: $context_str
+Information:
+---------------
+$query_str
+---------------
+
+Context:
+---------------
+$context_str
+---------------
 Answer:"""
 )
 
@@ -92,13 +104,15 @@ SAMPLE = 'Question\tAnswer\tInformation Used\n1. What special abilities does the
 
 
 QuestionSet = namedtuple(
-    "QuestionSet", ["question", "answer", "context", "ground_truth"]
+    "QuestionSet",
+    ["question", "answer", "prompt_context", "ground_truth", "original_context"],
 )
 
 
 def format_generated_questions(
     generated_question_sets: Iterable,
     ground_truth: str,
+    original_context: str,
     delimiter: str = "|",
     is_include_header: bool = False,
 ) -> List[QuestionSet]:
@@ -109,7 +123,9 @@ def format_generated_questions(
     for question_set in generated_question_sets:
         question_set_components = question_set.split(delimiter)
         try:
-            question = QuestionSet(*question_set_components, ground_truth)
+            question = QuestionSet(
+                *question_set_components, ground_truth, original_context
+            )
         except TypeError as e:
             LOGGER.warning(
                 f"""Question cannot be processed. This is likely a missing or extra delimiter in the response.
@@ -134,7 +150,6 @@ def format_generated_questions(
 
 def generate_question_set_response(
     context: str,
-    focus: str,
     num_of_questions: int,
     delimiter: str = ";",
     llm_model: str = "gpt-3.5-turbo",
@@ -145,7 +160,6 @@ def generate_question_set_response(
     string_delimiter = DELIMITER_ENGLISH.get(delimiter, delimiter)
     question_prompt = QUESTION_GENERATION_PROMPT.substitute(
         context_str=context,
-        focus_str=focus,
         num=num_of_questions,
         delimiter=string_delimiter,
     )
@@ -161,7 +175,33 @@ def generate_question_set_response(
         ],
     )
     response_dict = response.to_dict()
+    response_dict["original_context"] = context
     response_dict["generation_prompt"] = question_prompt
+    return response_dict
+
+
+def generate_question_eval_response(
+    question_set: QuestionSet,
+    llm_model: str = "gpt-3.5-turbo",
+) -> Dict:
+    # TODO: there's a bug when num_of_questions is 1; the llm will respond with a 1 "set" of questions, which is more than 1 question
+
+    question_eval_prompt = QUESTION_EVAL_PROMPT.substitute(
+        query_str=question_set.question, context_str=question_set.original_context
+    )
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {
+                "role": "system",
+                "content": "You are a proofreader checking exam question validity.",
+            },
+            {"role": "user", "content": question_eval_prompt},
+        ],
+    )
+
+    response_dict = response.to_dict()
+    response_dict["generation_prompt"] = question_eval_prompt
     return response_dict
 
 
@@ -174,6 +214,12 @@ def parse_args():
         type=str,
         help="The delimiter to be used for prompting and formatting. Note: Semicolons do not work very well with question generation.",
         default="|",
+    )
+    parser.add_argument(
+        "--evaluate",
+        action="store_true",
+        help="Whether to perform question evaluation. Default is to skip question evaluation.",
+        default=False,
     )
     parser.add_argument(
         "--generate",
@@ -255,7 +301,6 @@ def generate_and_save_questions(args):
         LOGGER.info(f"Generating questions for: {monster_name}")
         response = generate_question_set_response(
             context=monster_info,
-            focus=monster_name,
             num_of_questions=args.num_to_generate,
             delimiter=args.delimiter,
         )
@@ -291,10 +336,32 @@ def parse_and_aggregate_generated_questions(args):
                 [
                     question.question,
                     question.answer,
-                    question.context,
+                    question.prompt_context,
                     question.ground_truth,
                 ]
             )
+
+
+def evaluate_questions_and_save_response(args):
+    # Where generated responses from openai will go
+    output_dir = Path(args.output_dir)
+    if not output_dir.is_dir():
+        LOGGER.error(
+            f"{output_dir} is not an existing directory. Please create it before trying to put files into it."
+        )
+        exit()
+
+    total_question_set = load_generated_questions(output_dir)
+
+    for question_set in total_question_set[args.start_index : args.end_index]:
+        LOGGER.info(f"Evaluating questions for: {question_set.ground_truth}")
+        response = generate_question_eval_response(question_set)
+
+        response["question"] = question_set.question
+        response["prompt_context"] = question_set.original_context
+        filepath = Path(question_set.ground_truth)
+        with open(f"{output_dir}/{filepath.stem}_eval.json", "w") as fp:
+            json.dump(response, fp)
 
 
 def load_generated_questions(output_dir: Path):
@@ -308,6 +375,7 @@ def load_generated_questions(output_dir: Path):
             choice = choices[0]
             message = choice.get("message")
             content = message.get("content")
+            original_context = prompt_response.get("original_context")
         except (KeyError, TypeError) as e:
             LOGGER.warning(f"Failed processing {filename}. See error:\n{e}")
         content_list = content.split("\n")
@@ -315,6 +383,7 @@ def load_generated_questions(output_dir: Path):
             generated_question_sets=content_list[1:],
             ground_truth=filename,
             delimiter=args.delimiter,
+            original_context=original_context,
         )
         total_question_set.extend(question_set_list)
 
@@ -330,3 +399,6 @@ if __name__ == "__main__":
 
     if args.parse:
         parse_and_aggregate_generated_questions(args)
+
+    if args.evaluate:
+        evaluate_questions_and_save_response(args)
