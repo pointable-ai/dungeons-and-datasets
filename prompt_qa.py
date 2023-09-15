@@ -20,6 +20,14 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 LOGGER.setLevel(logging.DEBUG)
 
 
+DELIMITER_ENGLISH = {
+    "|": "pipes",
+    ";": "semicolons",
+    ",": "commas",
+    "\\t": "tabs",
+    "\\s": "spaces",
+}
+
 QUESTION_EVAL_PROMPT = Template(
     """Please tell if a given piece of information is supported by the context.
 You need to answer with either YES or NO.
@@ -68,7 +76,7 @@ $context_str
 
 Given the context information and not prior knowledge. Generate only questions based on the below query.
 
-Your task is to create $num questions and the answer key for a quiz/examination where there is one answer per one question.
+Your task is to create $num questions and the answer key for a quiz/examination that is not multiple choice and there is one answer per one question.
 
 The questions should follow the below constraints:
 - The questions should be diverse in nature across the context provided.
@@ -132,11 +140,14 @@ def generate_question_set_response(
     llm_model: str = "gpt-3.5-turbo",
 ) -> Dict:
     # TODO: there's a bug when num_of_questions is 1; the llm will respond with a 1 "set" of questions, which is more than 1 question
+
+    # If delimiter isn't in our pool of know delimiters, we just go with what's provided
+    string_delimiter = DELIMITER_ENGLISH.get(delimiter, delimiter)
     question_prompt = QUESTION_GENERATION_PROMPT.substitute(
         context_str=context,
         focus_str=focus,
         num=num_of_questions,
-        delimiter=delimiter,
+        delimiter=string_delimiter,
     )
     # TODO: this should be hotswappable
     response = openai.ChatCompletion.create(
