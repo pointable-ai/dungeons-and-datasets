@@ -9,3 +9,4 @@ model/
 .noteablekeep
 __pycache__
 .env
+chroma/
