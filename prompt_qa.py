@@ -20,6 +20,7 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 LOGGER.setLevel(logging.INFO)
 
 MAX_CONTEXT = 4096
+LOCAL_LLM = None
 
 DELIMITER_ENGLISH = {
     "|": "pipes",
@@ -211,6 +212,8 @@ def generate_question_set_response_local(
     num_of_questions: int,
     delimiter: str = ";",
 ) -> Dict:
+    if LOCAL_LLM is None:
+        raise RuntimeError("Missing local llm client")
     # TODO: there's a bug when num_of_questions is 1; the llm will respond with a 1 "set" of questions, which is more than 1 question
 
     # If delimiter isn't in our pool of know delimiters, we just go with what's provided
@@ -221,7 +224,7 @@ def generate_question_set_response_local(
         delimiter=string_delimiter,
     )
     # TODO: this should be hotswappable and merged with remote version
-    response = llm(
+    response = LOCAL_LLM(
         question_prompt,
         max_tokens=MAX_CONTEXT,
         # stop=["\n"],
@@ -261,6 +264,9 @@ def generate_question_eval_response(
 def generate_question_eval_response_local(
     question_set: QuestionSet
 ) -> Dict:
+    if LOCAL_LLM is None:
+        raise RuntimeError("Missing local llm client")
+
     # TODO: there's a bug when num_of_questions is 1; the llm will respond with a 1 "set" of questions, which is more than 1 question
 
     question_eval_prompt = QUESTION_EVAL_PROMPT.substitute(
@@ -268,7 +274,7 @@ def generate_question_eval_response_local(
     )
 
     # TODO: this should be hotswappable and merged with remote version
-    response = llm(
+    response = LOCAL_LLM(
         question_eval_prompt,
         max_tokens=MAX_CONTEXT,
         # stop=["\n"],
@@ -306,11 +312,18 @@ def generate_questions_and_save_response(args):
     for monster_info in monster_infos[args.start_index : args.end_index]:
         monster_name = monster_info.get("monster_name")
         LOGGER.info(f"Generating questions for: {monster_name}")
-        response = generate_question_set_response(
-            context=monster_info,
-            num_of_questions=args.num_to_generate,
-            delimiter=args.delimiter,
-        )
+        if args.local_llm:
+            response = generate_question_set_response_local(
+                context=monster_info,
+                num_of_questions=args.num_to_generate,
+                delimiter=args.delimiter,
+            )
+        else:
+            response = generate_question_set_response(
+                context=monster_info,
+                num_of_questions=args.num_to_generate,
+                delimiter=args.delimiter,
+            )
 
         filename = f"{args.output_dir}{monster_name}_{response['id']}"
         filepath = Path(f"{filename}.json")
@@ -388,7 +401,10 @@ def evaluate_questions_and_save_response(args):
 
     for question_set in total_question_set[args.start_index : args.end_index]:
         LOGGER.info(f"Evaluating questions for: {question_set.ground_truth}")
-        response = generate_question_eval_response(question_set)
+        if args.local_llm:
+            response = generate_question_eval_response_local(question_set)
+        else:
+            response = generate_question_eval_response(question_set)
 
         # Write contexts to the prompt response
         response["question"] = question_set.question
@@ -557,7 +573,7 @@ if __name__ == "__main__":
         GGUF_MODEL_PATH = "./model/nous-hermes-llama2-13b-q4.gguf"
         # GGUF_MODEL_PATH = "./model/nous-hermes-llama-2-7b-q4.gguf"
 
-        llm = Llama(model_path=GGUF_MODEL_PATH, n_gpu_layers=999, n_ctx=MAX_CONTEXT, verbose=False, use_mmap=False)
+        LOCAL_LLM = Llama(model_path=GGUF_MODEL_PATH, n_gpu_layers=999, n_ctx=MAX_CONTEXT, verbose=False, use_mmap=False)
 
     if args.generate:
         generate_questions_and_save_response(args)
