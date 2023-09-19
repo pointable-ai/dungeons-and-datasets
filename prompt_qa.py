@@ -19,6 +19,7 @@ LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 LOGGER.setLevel(logging.INFO)
 
+MAX_CONTEXT = 4096
 
 DELIMITER_ENGLISH = {
     "|": "pipes",
@@ -205,6 +206,33 @@ def generate_question_set_response(
     return response_dict
 
 
+def generate_question_set_response_local(
+    context: str,
+    num_of_questions: int,
+    delimiter: str = ";",
+) -> Dict:
+    # TODO: there's a bug when num_of_questions is 1; the llm will respond with a 1 "set" of questions, which is more than 1 question
+
+    # If delimiter isn't in our pool of know delimiters, we just go with what's provided
+    string_delimiter = DELIMITER_ENGLISH.get(delimiter, delimiter)
+    question_prompt = QUESTION_GENERATION_PROMPT.substitute(
+        context_str=context,
+        num=num_of_questions,
+        delimiter=string_delimiter,
+    )
+    # TODO: this should be hotswappable and merged with remote version
+    response = llm(
+        question_prompt,
+        max_tokens=MAX_CONTEXT,
+        # stop=["\n"],
+        echo=False,
+        temperature=0.5
+    )
+    response_dict = response.to_dict()
+    response_dict["original_context"] = context
+    response_dict["generation_prompt"] = question_prompt
+    return response_dict
+
 def generate_question_eval_response(
     question_set: QuestionSet,
     llm_model: str = "gpt-3.5-turbo",
@@ -223,6 +251,29 @@ def generate_question_eval_response(
             },
             {"role": "user", "content": question_eval_prompt},
         ],
+    )
+
+    response_dict = response.to_dict()
+    response_dict["generation_prompt"] = question_eval_prompt
+    return response_dict
+
+
+def generate_question_eval_response_local(
+    question_set: QuestionSet
+) -> Dict:
+    # TODO: there's a bug when num_of_questions is 1; the llm will respond with a 1 "set" of questions, which is more than 1 question
+
+    question_eval_prompt = QUESTION_EVAL_PROMPT.substitute(
+        query_str=question_set.question, context_str=question_set.original_context
+    )
+
+    # TODO: this should be hotswappable and merged with remote version
+    response = llm(
+        question_eval_prompt,
+        max_tokens=MAX_CONTEXT,
+        # stop=["\n"],
+        echo=False,
+        temperature=0.5
     )
 
     response_dict = response.to_dict()
@@ -449,6 +500,12 @@ def parse_args():
         default=False,
     )
     parser.add_argument(
+        "--local_llm",
+        action="store_true",
+        help="Use llama locally instead of openai.",
+        default=False,
+    )
+    parser.add_argument(
         "--input_json",
         type=str,
         help="The json to input for question generation.",
@@ -492,6 +549,15 @@ def parse_args():
 # This is "throwaway" code for the D&D dataset
 if __name__ == "__main__":
     args = parse_args()
+
+    if args.local_llm:
+        from llama_cpp import Llama
+
+
+        GGUF_MODEL_PATH = "./model/nous-hermes-llama2-13b-q4.gguf"
+        # GGUF_MODEL_PATH = "./model/nous-hermes-llama-2-7b-q4.gguf"
+
+        llm = Llama(model_path=GGUF_MODEL_PATH, n_gpu_layers=999, n_ctx=MAX_CONTEXT, verbose=False, use_mmap=False)
 
     if args.generate:
         generate_questions_and_save_response(args)
