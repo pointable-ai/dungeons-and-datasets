@@ -231,10 +231,9 @@ def generate_question_set_response_local(
         echo=False,
         temperature=0
     )
-    response_dict = response.to_dict()
-    response_dict["original_context"] = context
-    response_dict["generation_prompt"] = question_prompt
-    return response_dict
+    response["original_context"] = context
+    response["generation_prompt"] = question_prompt
+    return response
 
 def generate_question_eval_response(
     question_set: QuestionSet,
@@ -282,8 +281,7 @@ def generate_question_eval_response_local(
         temperature=0
     )
 
-    response_dict = response.to_dict()
-    response_dict["generation_prompt"] = question_eval_prompt
+    response["generation_prompt"] = question_eval_prompt
     return response_dict
 
 
