@@ -226,7 +226,7 @@ def generate_question_set_response_local(
         max_tokens=MAX_CONTEXT,
         # stop=["\n"],
         echo=False,
-        temperature=0.5
+        temperature=0
     )
     response_dict = response.to_dict()
     response_dict["original_context"] = context
@@ -273,7 +273,7 @@ def generate_question_eval_response_local(
         max_tokens=MAX_CONTEXT,
         # stop=["\n"],
         echo=False,
-        temperature=0.5
+        temperature=0
     )
 
     response_dict = response.to_dict()
