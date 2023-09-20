@@ -455,6 +455,7 @@ def load_generated_questions(
                 content = _get_content_openai(prompt_response)
         except (KeyError, TypeError) as e:
             LOGGER.warning(f"Failed processing {filename}. See error:\n{e}")
+            raise
             continue
 
         try:
