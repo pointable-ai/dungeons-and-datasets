@@ -15,6 +15,13 @@ import re
 
 import openai
 
+from prompt_constants import (
+    QUESTION_GENERATION_PROMPT_LLAMA,
+    QUESTION_EVAL_PROMPT_OPENAI,
+    QUESTION_EVAL_PROMPT_LLAMA,
+    QUESTION_GENERATION_PROMPT_OPENAI,
+)
+
 LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 LOGGER.setLevel(logging.INFO)
@@ -86,7 +93,7 @@ def format_generated_questions(
     return question_set_list
 
 
-def generate_question_set_response(
+def generate_question_set_response_openai(
     context: str,
     num_of_questions: int,
     delimiter: str = ";",
@@ -138,7 +145,6 @@ def generate_question_set_response_llama(
     response = LOCAL_LLM(
         question_prompt,
         max_tokens=MAX_CONTEXT,
-        # stop=["\n"],
         echo=False,
         temperature=0,
     )
@@ -147,7 +153,7 @@ def generate_question_set_response_llama(
     return response
 
 
-def generate_question_eval_response(
+def generate_question_set_response_openai(
     question_set: QuestionSet,
     llm_model: str = "gpt-3.5-turbo",
 ) -> Dict:
@@ -186,7 +192,6 @@ def generate_question_eval_response_llama(question_set: QuestionSet) -> Dict:
     response = LOCAL_LLM(
         question_eval_prompt,
         max_tokens=MAX_CONTEXT,
-        # stop=["\n"],
         echo=False,
         temperature=0,
     )
@@ -227,7 +232,7 @@ def generate_questions_and_save_response(args):
                 delimiter=args.delimiter,
             )
         else:
-            response = generate_question_set_response(
+            response = generate_question_set_response_openai(
                 context=monster_info,
                 num_of_questions=args.num_to_generate,
                 delimiter=args.delimiter,
@@ -312,7 +317,7 @@ def evaluate_questions_and_save_response(args):
         if args.local_llm:
             response = generate_question_eval_response_llama(question_set)
         else:
-            response = generate_question_eval_response(question_set)
+            response = generate_question_eval_response_openai(question_set)
 
         # Write contexts to the prompt response
         response["question"] = question_set.question
@@ -496,19 +501,18 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
 
-    # if args.local_llm:
-    #     from llama_cpp import Llama
+    if args.local_llm:
+        from llama_cpp import Llama
 
-    #     GGUF_MODEL_PATH = "./model/nous-hermes-llama2-13b-q4.gguf"
-    #     # GGUF_MODEL_PATH = "./model/nous-hermes-llama-2-7b-q4.gguf"
+        GGUF_MODEL_PATH = "./model/nous-hermes-llama2-13b-q4.gguf"
 
-    #     LOCAL_LLM = Llama(
-    #         model_path=GGUF_MODEL_PATH,
-    #         n_gpu_layers=999,
-    #         n_ctx=MAX_CONTEXT,
-    #         verbose=False,
-    #         use_mmap=False,
-    #     )
+        LOCAL_LLM = Llama(
+            model_path=GGUF_MODEL_PATH,
+            n_gpu_layers=999,
+            n_ctx=MAX_CONTEXT,
+            verbose=False,
+            use_mmap=False,
+        )
 
     if args.generate:
         generate_questions_and_save_response(args)
