@@ -454,14 +454,17 @@ def load_generated_questions(
             else:
                 content = _get_content_openai(prompt_response)
         except (KeyError, TypeError) as e:
-            LOGGER.warning(f"Failed processing {filename}. See error:\n{e}")
-            raise
+            LOGGER.warning(
+                f"Failed processing {filename}. See error:\n{e}", exc_info=True
+            )
             continue
 
         try:
             original_context = prompt_response["original_context"]
         except (KeyError, TypeError) as e:
-            LOGGER.warning(f"Failed processing {filename}. See error:\n{e}")
+            LOGGER.warning(
+                f"Failed processing {filename}. See error:\n{e}", exc_info=True
+            )
             continue
 
         content_list = content.split("\n")
@@ -498,7 +501,9 @@ def load_generated_evals(args, output_dir: Path, glob_pattern: str = "*_eval*.js
             answer = prompt_response["answer"]
 
         except (KeyError, TypeError) as e:
-            LOGGER.warning(f"Failed processing {filename}. See error:\n{e}")
+            LOGGER.warning(
+                f"Failed processing {filename}. See error:\n{e}", exc_info=True
+            )
 
         eval_set = EvalSet(
             question, answer, generation_prompt, filename, original_context, evaluation
