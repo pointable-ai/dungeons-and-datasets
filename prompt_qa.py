@@ -419,7 +419,19 @@ def _get_eval_filename(filepath: Path, uuid: str) -> Path:
     return filepath.parent.joinpath(filename)
 
 
-def load_generated_questions(output_dir: Path, glob_pattern: str = "*[!_eval].json"):
+def _get_content_openai(prompt_response: Dict) -> str:
+    choices = prompt_response["choices"]
+    choice = choices[0]
+    message = choice["message"]
+    return message["content"]
+
+
+def _get_content_llama(prompt_response: Dict) -> str:
+    choices = prompt_response["choices"]
+    return choices["text"]
+
+
+def load_generated_questions(output_dir: Path, glob_pattern: str = "*[!_eval].json", args):
     """Format and create the list of questions from file into memory.
     glob_pattern default ignores the eval files"""
 
@@ -428,13 +440,20 @@ def load_generated_questions(output_dir: Path, glob_pattern: str = "*[!_eval].js
         with open(filename, "r") as fp:
             prompt_response = json.load(fp)
         try:
-            choices = prompt_response["choices"]
-            choice = choices[0]
-            message = choice["message"]
-            content = message["content"]
+            if args.local_llm:
+                content = _get_content_llama(prompt_response)
+            else
+                content = _get_content_openai(prompt_response)
+        except (KeyError, TypeError) as e:
+            LOGGER.warning(f"Failed processing {filename}. See error:\n{e}")
+            continue
+
+        try:
             original_context = prompt_response["original_context"]
         except (KeyError, TypeError) as e:
             LOGGER.warning(f"Failed processing {filename}. See error:\n{e}")
+            continue
+
         content_list = content.split("\n")
         question_set_list = format_generated_questions(
             generated_question_sets=content_list[1:],
@@ -456,9 +475,10 @@ def load_generated_evals(output_dir: Path, glob_pattern: str = "*_eval*.json"):
         with open(filename, "r") as fp:
             prompt_response = json.load(fp)
         try:
-            choices = prompt_response["choices"]
-            choice = choices[0]
-            message = choice["message"]
+            if args.local_llm:
+                evaluation = _get_content_llama(prompt_response)
+            else
+                evaluation = _get_content_openai(prompt_response)
 
             # Prior are content set ups, rest of these are the vars that we will use
             evaluation = message["content"]
