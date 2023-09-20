@@ -108,7 +108,6 @@ def generate_question_set_response_openai(
         num=num_of_questions,
         delimiter=string_delimiter,
     )
-    # TODO: this should be hotswappable
     response = openai.ChatCompletion.create(
         model=llm_model,
         messages=[
@@ -141,7 +140,6 @@ def generate_question_set_response_llama(
         num=num_of_questions,
         delimiter=string_delimiter,
     )
-    # TODO: this should be hotswappable and merged with remote version
     response = LOCAL_LLM(
         question_prompt,
         max_tokens=MAX_CONTEXT,
@@ -188,7 +186,6 @@ def generate_question_eval_response_llama(question_set: QuestionSet) -> Dict:
         query_str=question_set.question, context_str=question_set.original_context
     )
 
-    # TODO: this should be hotswappable and merged with remote version
     response = LOCAL_LLM(
         question_eval_prompt,
         max_tokens=MAX_CONTEXT,
