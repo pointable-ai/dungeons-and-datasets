@@ -107,32 +107,26 @@ Context: An apple pie is a fruit pie in which the principal filling ingredient i
 Apple pie is often served with whipped cream, ice cream ('apple pie à la mode'), custard or cheddar cheese.
 It is generally double-crusted, with pastry both above and below the filling; the upper crust may be solid or
 latticed (woven of crosswise strips).
-Response: YES
+Answer: YES
 
 Information: Does Apple pies taste bad?
 Context: An apple pie is a fruit pie in which the principal filling ingredient is apples.
 Apple pie is often served with whipped cream, ice cream ('apple pie à la mode'), custard or cheddar cheese.
 It is generally double-crusted, with pastry both above and below the filling; the upper crust may be solid or
 latticed (woven of crosswise strips).
-Response: NO
+Answer: NO
+
 
 Information: Does the context say apple can be pies?
 Context: An apple pie is a fruit pie in which the principal filling ingredient is apples.
 Apple pie is often served with whipped cream, ice cream ('apple pie à la mode'), custard or cheddar cheese.
 It is generally double-crusted, with pastry both above and below the filling; the upper crust may be solid or
 latticed (woven of crosswise strips).
-Response: NO
+Answer: NO
 
 ### Input:
-Information:
----------------
-$query_str
----------------
-
-Context:
----------------
-$context_str
----------------
+Information: $query_str
+Context: $context_str
 
 ### Response:
 """
