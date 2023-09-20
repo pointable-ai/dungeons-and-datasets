@@ -132,7 +132,14 @@ QuestionSet = namedtuple(
 )
 EvalSet = namedtuple(
     "EvalSet",
-    ["question", "answer", "generation_prompt", "ground_truth", "original_context", "evaluation"],
+    [
+        "question",
+        "answer",
+        "generation_prompt",
+        "ground_truth",
+        "original_context",
+        "evaluation",
+    ],
 )
 
 
@@ -229,11 +236,12 @@ def generate_question_set_response_local(
         max_tokens=MAX_CONTEXT,
         # stop=["\n"],
         echo=False,
-        temperature=0
+        temperature=0,
     )
     response["original_context"] = context
     response["generation_prompt"] = question_prompt
     return response
+
 
 def generate_question_eval_response(
     question_set: QuestionSet,
@@ -260,9 +268,7 @@ def generate_question_eval_response(
     return response_dict
 
 
-def generate_question_eval_response_local(
-    question_set: QuestionSet
-) -> Dict:
+def generate_question_eval_response_local(question_set: QuestionSet) -> Dict:
     if LOCAL_LLM is None:
         raise RuntimeError("Missing local llm client")
 
@@ -278,7 +284,7 @@ def generate_question_eval_response_local(
         max_tokens=MAX_CONTEXT,
         # stop=["\n"],
         echo=False,
-        temperature=0
+        temperature=0,
     )
 
     response["generation_prompt"] = question_eval_prompt
@@ -352,7 +358,7 @@ def parse_and_aggregate_generated_questions(args):
                     question.answer,
                     question.generation_prompt,
                     question.ground_truth,
-                    question.original_context
+                    question.original_context,
                 ]
             )
 
@@ -381,7 +387,7 @@ def parse_and_aggregate_evaluation(args):
                     evaluation.generation_prompt,
                     evaluation.ground_truth,
                     evaluation.original_context,
-                    evaluation.evaluation
+                    evaluation.evaluation,
                 ]
             )
 
@@ -431,7 +437,9 @@ def _get_content_llama(prompt_response: Dict) -> str:
     return choices["text"]
 
 
-def load_generated_questions(args, output_dir: Path, glob_pattern: str = "*[!_eval].json"):
+def load_generated_questions(
+    args, output_dir: Path, glob_pattern: str = "*[!_eval].json"
+):
     """Format and create the list of questions from file into memory.
     glob_pattern default ignores the eval files"""
 
@@ -477,7 +485,7 @@ def load_generated_evals(args, output_dir: Path, glob_pattern: str = "*_eval*.js
         try:
             if args.local_llm:
                 evaluation = _get_content_llama(prompt_response)
-            else
+            else:
                 evaluation = _get_content_openai(prompt_response)
 
             # Prior are content set ups, rest of these are the vars that we will use
@@ -493,7 +501,6 @@ def load_generated_evals(args, output_dir: Path, glob_pattern: str = "*_eval*.js
         eval_set = EvalSet(
             question, answer, generation_prompt, filename, original_context, evaluation
         )
-\
         total_eval_set.append(eval_set)
 
     return total_eval_set
@@ -587,11 +594,16 @@ if __name__ == "__main__":
     if args.local_llm:
         from llama_cpp import Llama
 
-
         GGUF_MODEL_PATH = "./model/nous-hermes-llama2-13b-q4.gguf"
         # GGUF_MODEL_PATH = "./model/nous-hermes-llama-2-7b-q4.gguf"
 
-        LOCAL_LLM = Llama(model_path=GGUF_MODEL_PATH, n_gpu_layers=999, n_ctx=MAX_CONTEXT, verbose=False, use_mmap=False)
+        LOCAL_LLM = Llama(
+            model_path=GGUF_MODEL_PATH,
+            n_gpu_layers=999,
+            n_ctx=MAX_CONTEXT,
+            verbose=False,
+            use_mmap=False,
+        )
 
     if args.generate:
         generate_questions_and_save_response(args)
