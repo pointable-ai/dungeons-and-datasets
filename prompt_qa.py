@@ -435,7 +435,7 @@ def _get_content_openai(prompt_response: Dict) -> str:
 def _get_content_llama(prompt_response: Dict) -> str:
     choices = prompt_response["choices"]
     choice = choices[0]
-    return choices["text"]
+    return choice["text"]
 
 
 def load_generated_questions(
