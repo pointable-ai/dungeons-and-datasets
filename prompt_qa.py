@@ -442,7 +442,7 @@ def load_generated_questions(args, output_dir: Path, glob_pattern: str = "*[!_ev
         try:
             if args.local_llm:
                 content = _get_content_llama(prompt_response)
-            else
+            else:
                 content = _get_content_openai(prompt_response)
         except (KeyError, TypeError) as e:
             LOGGER.warning(f"Failed processing {filename}. See error:\n{e}")
