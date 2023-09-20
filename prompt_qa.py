@@ -30,6 +30,27 @@ DELIMITER_ENGLISH = {
     "\\s": "spaces",
 }
 
+"""https://huggingface.co/NousResearch/Nous-Hermes-Llama2-13b#prompt-format
+### Instruction:
+<prompt>
+
+### Response:
+<leave a newline blank for model to respond>
+
+
+----OR----
+
+### Instruction:
+<prompt>
+
+### Input:
+<additional context>
+
+### Response:
+<leave a newline blank for model to respond>
+
+"""
+
 QUESTION_EVAL_PROMPT_OPENAI = Template(
     """Please determine if a Question is supported by the context and fair to ask someone who does not have access to the exact context.
 You need to answer with either YES or NO.
@@ -73,7 +94,8 @@ Answer:"""
 
 
 QUESTION_EVAL_PROMPT_LLAMA = Template(
-    """Please determine if a Question is supported by the context and fair to ask someone who does not have access to the exact context.
+    """### Instruction:
+Please determine if a Question is supported by the context and fair to ask someone who does not have access to the exact context.
 You need to answer with either YES or NO.
 Answer YES if any of the context supports the Question, even if most of the context is unrelated. If the you
 cannot answer with a YES or NO, the answer is NO.
@@ -85,22 +107,23 @@ Context: An apple pie is a fruit pie in which the principal filling ingredient i
 Apple pie is often served with whipped cream, ice cream ('apple pie à la mode'), custard or cheddar cheese.
 It is generally double-crusted, with pastry both above and below the filling; the upper crust may be solid or
 latticed (woven of crosswise strips).
-Answer: YES
+Response: YES
 
 Information: Does Apple pies taste bad?
 Context: An apple pie is a fruit pie in which the principal filling ingredient is apples.
 Apple pie is often served with whipped cream, ice cream ('apple pie à la mode'), custard or cheddar cheese.
 It is generally double-crusted, with pastry both above and below the filling; the upper crust may be solid or
 latticed (woven of crosswise strips).
-Answer: NO
+Response: NO
 
 Information: Does the context say apple can be pies?
 Context: An apple pie is a fruit pie in which the principal filling ingredient is apples.
 Apple pie is often served with whipped cream, ice cream ('apple pie à la mode'), custard or cheddar cheese.
 It is generally double-crusted, with pastry both above and below the filling; the upper crust may be solid or
 latticed (woven of crosswise strips).
-Answer: NO
+Response: NO
 
+### Input:
 Information:
 ---------------
 $query_str
@@ -110,7 +133,9 @@ Context:
 ---------------
 $context_str
 ---------------
-Answer:"""
+
+### Response:
+"""
 )
 
 GENERIC_EVAL_PROMPT = Template(
@@ -167,13 +192,8 @@ Please organize this into a delimited format using "$delimiter", with columns fo
 )
 
 QUESTION_GENERATION_PROMPT_LLAMA = Template(
-    """Context information is below.
-
----------------------
-$context_str
----------------------
-
-Given the context information and not prior knowledge. Generate only questions based on the below query.
+    """### Instruction:
+Given the Input and not prior knowledge, generate questions based on the below query.
 
 Your task is to create $num questions and the answer key for a quiz/examination that is not multiple choice and there is one answer per one question.
 
@@ -183,7 +203,13 @@ The questions should follow the below constraints:
 - When referring to the context information, the question should add contextual clues make it as unambiguous as possible.
 - Question and answer sets should have objective answers.
 
-Please organize this into a delimited format using "$delimiter", with columns for the Question, the Answer, and the Information used to arrive at the answer."""
+Please organize this into a delimited format using "$delimiter", with columns for the Question, the Answer, and the Information used to arrive at the answer.
+
+### Input:
+$context_str
+
+### Response:
+"""
 )
 
 
