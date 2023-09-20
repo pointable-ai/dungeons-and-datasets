@@ -337,7 +337,7 @@ def parse_and_aggregate_generated_questions(args):
         )
         exit()
 
-    total_question_set = load_generated_questions(output_dir)
+    total_question_set = load_generated_questions(args, output_dir)
 
     # Output the file with generated and formatted questions
     with open(args.output_file, "w") as fp:
@@ -365,7 +365,7 @@ def parse_and_aggregate_evaluation(args):
         )
         exit()
 
-    total_eval_set = load_generated_evals(output_dir)
+    total_eval_set = load_generated_evals(args, output_dir)
 
     # Output the file with generated and formatted questions
     with open(args.output_file, "w") as fp:
@@ -431,7 +431,7 @@ def _get_content_llama(prompt_response: Dict) -> str:
     return choices["text"]
 
 
-def load_generated_questions(output_dir: Path, glob_pattern: str = "*[!_eval].json", args):
+def load_generated_questions(args, output_dir: Path, glob_pattern: str = "*[!_eval].json"):
     """Format and create the list of questions from file into memory.
     glob_pattern default ignores the eval files"""
 
@@ -466,7 +466,7 @@ def load_generated_questions(output_dir: Path, glob_pattern: str = "*[!_eval].js
     return total_question_set
 
 
-def load_generated_evals(output_dir: Path, glob_pattern: str = "*_eval*.json"):
+def load_generated_evals(args, output_dir: Path, glob_pattern: str = "*_eval*.json"):
     """Format and create the list of questions from file into memory.
     glob_pattern default ignores the eval files"""
 
