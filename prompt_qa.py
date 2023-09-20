@@ -30,7 +30,7 @@ DELIMITER_ENGLISH = {
     "\\s": "spaces",
 }
 
-QUESTION_EVAL_PROMPT = Template(
+QUESTION_EVAL_PROMPT_OPENAI = Template(
     """Please determine if a Question is supported by the context and fair to ask someone who does not have access to the exact context.
 You need to answer with either YES or NO.
 Answer YES if any of the context supports the Question, even if most of the context is unrelated. If the you
@@ -72,6 +72,47 @@ Answer:"""
 )
 
 
+QUESTION_EVAL_PROMPT_LLAMA = Template(
+    """Please determine if a Question is supported by the context and fair to ask someone who does not have access to the exact context.
+You need to answer with either YES or NO.
+Answer YES if any of the context supports the Question, even if most of the context is unrelated. If the you
+cannot answer with a YES or NO, the answer is NO.
+
+Some examples are provided below.
+
+Information: Is an Apple pie is generally double-crusted?
+Context: An apple pie is a fruit pie in which the principal filling ingredient is apples.
+Apple pie is often served with whipped cream, ice cream ('apple pie à la mode'), custard or cheddar cheese.
+It is generally double-crusted, with pastry both above and below the filling; the upper crust may be solid or
+latticed (woven of crosswise strips).
+Answer: YES
+
+Information: Does Apple pies taste bad?
+Context: An apple pie is a fruit pie in which the principal filling ingredient is apples.
+Apple pie is often served with whipped cream, ice cream ('apple pie à la mode'), custard or cheddar cheese.
+It is generally double-crusted, with pastry both above and below the filling; the upper crust may be solid or
+latticed (woven of crosswise strips).
+Answer: NO
+
+Information: Does the context say apple can be pies?
+Context: An apple pie is a fruit pie in which the principal filling ingredient is apples.
+Apple pie is often served with whipped cream, ice cream ('apple pie à la mode'), custard or cheddar cheese.
+It is generally double-crusted, with pastry both above and below the filling; the upper crust may be solid or
+latticed (woven of crosswise strips).
+Answer: NO
+
+Information:
+---------------
+$query_str
+---------------
+
+Context:
+---------------
+$context_str
+---------------
+Answer:"""
+)
+
 GENERIC_EVAL_PROMPT = Template(
     """Please tell if a given piece of Information is supported by the context.
 You need to answer with either YES or NO.
@@ -105,7 +146,27 @@ $context_str
 Answer:"""
 )
 
-QUESTION_GENERATION_PROMPT = Template(
+QUESTION_GENERATION_PROMPT_OPENAI = Template(
+    """Context information is below.
+
+---------------------
+$context_str
+---------------------
+
+Given the context information and not prior knowledge. Generate only questions based on the below query.
+
+Your task is to create $num questions and the answer key for a quiz/examination that is not multiple choice and there is one answer per one question.
+
+The questions should follow the below constraints:
+- The questions should be diverse in nature across the context provided.
+- The questions are to be restricted to the context information provided.
+- When referring to the context information, the question should add contextual clues make it as unambiguous as possible.
+- Question and answer sets should have objective answers.
+
+Please organize this into a delimited format using "$delimiter", with columns for the Question, the Answer, and the Information used to arrive at the answer."""
+)
+
+QUESTION_GENERATION_PROMPT_LLAMA = Template(
     """Context information is below.
 
 ---------------------
@@ -192,7 +253,7 @@ def generate_question_set_response(
 
     # If delimiter isn't in our pool of know delimiters, we just go with what's provided
     string_delimiter = DELIMITER_ENGLISH.get(delimiter, delimiter)
-    question_prompt = QUESTION_GENERATION_PROMPT.substitute(
+    question_prompt = QUESTION_GENERATION_PROMPT_OPENAI.substitute(
         context_str=context,
         num=num_of_questions,
         delimiter=string_delimiter,
@@ -214,7 +275,7 @@ def generate_question_set_response(
     return response_dict
 
 
-def generate_question_set_response_local(
+def generate_question_set_response_llama(
     context: str,
     num_of_questions: int,
     delimiter: str = ";",
@@ -225,7 +286,7 @@ def generate_question_set_response_local(
 
     # If delimiter isn't in our pool of know delimiters, we just go with what's provided
     string_delimiter = DELIMITER_ENGLISH.get(delimiter, delimiter)
-    question_prompt = QUESTION_GENERATION_PROMPT.substitute(
+    question_prompt = QUESTION_GENERATION_PROMPT_LLAMA.substitute(
         context_str=context,
         num=num_of_questions,
         delimiter=string_delimiter,
@@ -249,7 +310,7 @@ def generate_question_eval_response(
 ) -> Dict:
     # TODO: there's a bug when num_of_questions is 1; the llm will respond with a 1 "set" of questions, which is more than 1 question
 
-    question_eval_prompt = QUESTION_EVAL_PROMPT.substitute(
+    question_eval_prompt = QUESTION_EVAL_PROMPT_OPENAI.substitute(
         query_str=question_set.question, context_str=question_set.original_context
     )
     response = openai.ChatCompletion.create(
@@ -268,13 +329,13 @@ def generate_question_eval_response(
     return response_dict
 
 
-def generate_question_eval_response_local(question_set: QuestionSet) -> Dict:
+def generate_question_eval_response_llama(question_set: QuestionSet) -> Dict:
     if LOCAL_LLM is None:
         raise RuntimeError("Missing local llm client")
 
     # TODO: there's a bug when num_of_questions is 1; the llm will respond with a 1 "set" of questions, which is more than 1 question
 
-    question_eval_prompt = QUESTION_EVAL_PROMPT.substitute(
+    question_eval_prompt = QUESTION_EVAL_PROMPT_LLAMA.substitute(
         query_str=question_set.question, context_str=question_set.original_context
     )
 
@@ -317,7 +378,7 @@ def generate_questions_and_save_response(args):
         monster_name = monster_info.get("monster_name")
         LOGGER.info(f"Generating questions for: {monster_name}")
         if args.local_llm:
-            response = generate_question_set_response_local(
+            response = generate_question_set_response_llama(
                 context=monster_info,
                 num_of_questions=args.num_to_generate,
                 delimiter=args.delimiter,
@@ -406,7 +467,7 @@ def evaluate_questions_and_save_response(args):
     for question_set in total_question_set[args.start_index : args.end_index]:
         LOGGER.info(f"Evaluating questions for: {question_set.ground_truth}")
         if args.local_llm:
-            response = generate_question_eval_response_local(question_set)
+            response = generate_question_eval_response_llama(question_set)
         else:
             response = generate_question_eval_response(question_set)
 
@@ -592,19 +653,19 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
 
-    if args.local_llm:
-        from llama_cpp import Llama
+    # if args.local_llm:
+    #     from llama_cpp import Llama
 
-        GGUF_MODEL_PATH = "./model/nous-hermes-llama2-13b-q4.gguf"
-        # GGUF_MODEL_PATH = "./model/nous-hermes-llama-2-7b-q4.gguf"
+    #     GGUF_MODEL_PATH = "./model/nous-hermes-llama2-13b-q4.gguf"
+    #     # GGUF_MODEL_PATH = "./model/nous-hermes-llama-2-7b-q4.gguf"
 
-        LOCAL_LLM = Llama(
-            model_path=GGUF_MODEL_PATH,
-            n_gpu_layers=999,
-            n_ctx=MAX_CONTEXT,
-            verbose=False,
-            use_mmap=False,
-        )
+    #     LOCAL_LLM = Llama(
+    #         model_path=GGUF_MODEL_PATH,
+    #         n_gpu_layers=999,
+    #         n_ctx=MAX_CONTEXT,
+    #         verbose=False,
+    #         use_mmap=False,
+    #     )
 
     if args.generate:
         generate_questions_and_save_response(args)
